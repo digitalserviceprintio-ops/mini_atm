@@ -175,7 +175,7 @@ export const ProfilAgenView: React.FC<ProfilAgenViewProps> = ({ profile, onSaveP
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block font-semibold mb-1 text-slate-700">ID Agen BRILink / Mini ATM</label>
+                <label className="block font-semibold mb-1 text-slate-700">ID Agen Link / Mini ATM</label>
                 <input
                   type="text"
                   required
