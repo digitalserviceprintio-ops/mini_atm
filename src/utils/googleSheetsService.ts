@@ -1,6 +1,7 @@
 import {
   Account,
   AgentProfile,
+  AppUser,
   CashMutation,
   PrinterSettings,
   Product,
@@ -12,6 +13,7 @@ export interface AppSyncData {
   accounts: Account[];
   mutations: CashMutation[];
   products: Product[];
+  users?: AppUser[];
   profile: AgentProfile | null;
   printerSettings: PrinterSettings | null;
 }
@@ -305,28 +307,32 @@ export async function fetchInitialDataFromSheets(customUrl?: string): Promise<{
  * Real-time Dispatchers: Otomatis tersimpan ke Google Sheets
  */
 
-// 1. Simpan / Update Transaksi
+// 1. Simpan / Update Transaksi (sekaligus sinkron Akun Kas & Mutasi Arus Kas)
 export async function syncTransactionToSheets(
   transaction: Transaction,
-  accounts?: Account[]
+  accounts?: Account[],
+  mutation?: CashMutation
 ): Promise<boolean> {
   if (!getGasUrl()) return false;
   const res = await sendToGas('saveTransaction', {
     transaction,
     accounts,
+    mutation,
   });
   return res.success;
 }
 
-// 2. Void Transaksi
+// 2. Void Transaksi (sekaligus sinkron Akun Kas & Mutasi Arus Kas)
 export async function syncVoidToSheets(
   transactionId: string,
-  accounts?: Account[]
+  accounts?: Account[],
+  mutation?: CashMutation
 ): Promise<boolean> {
   if (!getGasUrl()) return false;
   const res = await sendToGas('voidTransaction', {
     transactionId,
     accounts,
+    mutation,
   });
   return res.success;
 }
@@ -365,17 +371,19 @@ export async function syncProductToSheets(product: Product): Promise<boolean> {
   return res.success;
 }
 
-// 7. Checkout Kasir POS Fisik
+// 7. Checkout Kasir POS Fisik (Sinkron Produk, Transaksi, Akun Kas, dan Mutasi Kas)
 export async function syncCheckoutPOSToSheets(
   products: Product[],
   transaction: Transaction,
-  accounts: Account[]
+  accounts: Account[],
+  mutation?: CashMutation
 ): Promise<boolean> {
   if (!getGasUrl()) return false;
   const res = await sendToGas('checkoutPOS', {
     products,
     transaction,
     accounts,
+    mutation,
   });
   return res.success;
 }
@@ -396,12 +404,27 @@ export async function syncPrinterSettingsToSheets(
   return res.success;
 }
 
-// 10. Batch Synchronize All Application State to Spreadsheet
+// 10. Simpan / Update Akun Pengguna (Admin & Kasir)
+export async function syncUserToSheets(user: AppUser): Promise<boolean> {
+  if (!getGasUrl()) return false;
+  const res = await sendToGas('saveUser', { user });
+  return res.success;
+}
+
+// 11. Hapus Akun Pengguna
+export async function syncDeleteUserToSheets(userId: string): Promise<boolean> {
+  if (!getGasUrl()) return false;
+  const res = await sendToGas('deleteUser', { userId });
+  return res.success;
+}
+
+// 12. Batch Synchronize All Application State to Spreadsheet
 export async function syncAllToSheets(payload: {
   transactions: Transaction[];
   accounts: Account[];
   mutations: CashMutation[];
   products: Product[];
+  users?: AppUser[];
   profile: AgentProfile;
   printerSettings: PrinterSettings;
 }): Promise<{ success: boolean; message: string }> {

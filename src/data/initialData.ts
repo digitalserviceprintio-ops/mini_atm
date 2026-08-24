@@ -1,4 +1,43 @@
-import { Account, AgentProfile, PrinterSettings, Product, Transaction } from '../types';
+import { Account, AgentProfile, AppUser, PrinterSettings, Product, Transaction } from '../types';
+
+export const INITIAL_USERS: AppUser[] = [
+  {
+    id: 'usr_admin_1',
+    username: 'admin',
+    name: 'Bpk. Rahmat Santoso (Owner)',
+    password: 'admin123',
+    role: 'Admin',
+    phone: '0812-3456-7890',
+    status: 'ACTIVE',
+    createdAt: '01 Jan 2026 08:00',
+    notes: 'Pemilik & Pengelola Utama Outlet',
+    lastLogin: 'Hari ini',
+  },
+  {
+    id: 'usr_kasir_1',
+    username: 'kasir',
+    name: 'Siti Rahmawati',
+    password: 'kasir123',
+    role: 'Kasir',
+    phone: '0813-9876-5432',
+    status: 'ACTIVE',
+    createdAt: '15 Jan 2026 09:30',
+    notes: 'Operator Kasir Shift Pagi (08:00 - 15:00)',
+    lastLogin: 'Kemarin',
+  },
+  {
+    id: 'usr_kasir_2',
+    username: 'kasir2',
+    name: 'Ahmad Fauzi',
+    password: 'kasir456',
+    role: 'Kasir',
+    phone: '0857-1122-3344',
+    status: 'ACTIVE',
+    createdAt: '01 Feb 2026 13:00',
+    notes: 'Operator Kasir Shift Sore/Malam (15:00 - 22:00)',
+    lastLogin: '3 hari lalu',
+  },
+];
 
 export const INITIAL_AGENT_PROFILE: AgentProfile = {
   storeName: 'MINI ATM AGENT',

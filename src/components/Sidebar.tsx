@@ -14,6 +14,7 @@ import {
   ChevronDown,
   LogOut,
   FileSpreadsheet,
+  Users,
 } from 'lucide-react';
 import { ActiveTab, AgentProfile } from '../types';
 import { AuthUser } from './views/LoginView';
@@ -25,6 +26,7 @@ interface SidebarProps {
   onClose: () => void;
   profile: AgentProfile;
   trxCount: number;
+  userCount?: number;
   currentUser?: AuthUser | null;
   onLogout?: () => void;
 }
@@ -36,6 +38,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
   profile,
   trxCount,
+  userCount = 0,
   currentUser,
   onLogout,
 }) => {
@@ -190,8 +193,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     : 'text-blue-100 hover:bg-blue-700/60'
                 }`}
               >
-                <ShieldCheck className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Kelola Role (Admin & Kasir)</span>
+                <Users className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Akun Admin & Kasir</span>
+                {userCount > 0 && (
+                  <span className="bg-blue-900/90 text-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                    {userCount}
+                  </span>
+                )}
               </button>
 
               <button

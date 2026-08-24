@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  CreditCard,
   Lock,
   User,
   Eye,
@@ -8,7 +7,6 @@ import {
   LogIn,
   ShieldCheck,
   UserCheck,
-  CheckCircle2,
   AlertCircle,
   Sparkles,
   Store,
@@ -17,10 +15,12 @@ import {
   ArrowRight,
   KeyRound,
   Fingerprint,
+  Users,
 } from 'lucide-react';
-import { AgentProfile, UserRole } from '../../types';
+import { AgentProfile, AppUser, UserRole } from '../../types';
 
 export interface AuthUser {
+  id?: string;
   username: string;
   name: string;
   role: UserRole;
@@ -29,46 +29,20 @@ export interface AuthUser {
 
 interface LoginViewProps {
   profile: AgentProfile;
+  users?: AppUser[];
   onLoginSuccess: (user: AuthUser) => void;
 }
 
-export const DEMO_ACCOUNTS: {
-  username: string;
-  name: string;
-  password: string;
-  role: UserRole;
-  desc: string;
-  badge: string;
-  highlights: string[];
-}[] = [
-  {
-    username: 'admin',
-    name: 'Bpk. Rahmat Santoso',
-    password: 'admin123',
-    role: 'Admin',
-    desc: 'Pemilik outlet dengan kewenangan penuh atas seluruh arus kas, audit transaksi, dan pengaturan akun.',
-    badge: 'Owner / Full Access',
-    highlights: ['Laporan & Arus Kas', 'Kelola Akun Bank', 'Otorisasi Void Transaksi'],
-  },
-  {
-    username: 'kasir',
-    name: 'Siti Rahmawati',
-    password: 'kasir123',
-    role: 'Kasir',
-    desc: 'Operator kasir untuk melayani transaksi nasabah, penjualan POS pulsa/voucher, dan cetak struk thermal.',
-    badge: 'Operator Kasir',
-    highlights: ['Catat Transaksi Baru', 'Kasir POS & Stok', 'Cetak Struk Thermal'],
-  },
-];
-
-export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess }) => {
+export const LoginView: React.FC<LoginViewProps> = ({ profile, users = [], onLoginSuccess }) => {
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
-  const [activeTabRole, setActiveTabRole] = useState<'all' | 'admin' | 'kasir'>('all');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState<'ALL' | 'Admin' | 'Kasir'>('ALL');
+
+  const safeUsers = Array.isArray(users) ? users : [];
 
   const executeLogin = (user: AuthUser) => {
     onLoginSuccess(user);
@@ -79,11 +53,16 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
     setErrorMessage(null);
 
     const trimmedUser = username.trim().toLowerCase();
-    const matchedAccount = DEMO_ACCOUNTS.find(
+    const matchedAccount = safeUsers.find(
       (acc) => acc.username.toLowerCase() === trimmedUser && acc.password === password
     );
 
     if (matchedAccount) {
+      if (matchedAccount.status === 'INACTIVE') {
+        setErrorMessage('Akun ini berstatus Non-Aktif. Hubungi Admin untuk mengaktifkannya kembali.');
+        return;
+      }
+
       setIsLoading(true);
       setTimeout(() => {
         setIsLoading(false);
@@ -95,18 +74,24 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
           .toUpperCase();
 
         executeLogin({
+          id: matchedAccount.id,
           username: matchedAccount.username,
           name: matchedAccount.name,
           role: matchedAccount.role,
-          avatarInitials: initials,
+          avatarInitials: initials || (matchedAccount.role === 'Admin' ? 'AD' : 'KS'),
         });
       }, 300);
     } else {
-      setErrorMessage('Username atau kata sandi tidak sesuai. Silakan pilih salah satu akun demo di bawah.');
+      setErrorMessage('Username atau kata sandi tidak cocok. Silakan periksa kembali atau pilih akun dari daftar di bawah.');
     }
   };
 
-  const handleQuickDemoLogin = (account: typeof DEMO_ACCOUNTS[0]) => {
+  const handleQuickLogin = (account: AppUser) => {
+    if (account.status === 'INACTIVE') {
+      setErrorMessage(`Akun "${account.name}" sedang non-aktif.`);
+      return;
+    }
+
     setUsername(account.username);
     setPassword(account.password);
     setErrorMessage(null);
@@ -122,13 +107,20 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
         .toUpperCase();
 
       executeLogin({
+        id: account.id,
         username: account.username,
         name: account.name,
         role: account.role,
-        avatarInitials: initials,
+        avatarInitials: initials || (account.role === 'Admin' ? 'AD' : 'KS'),
       });
     }, 250);
   };
+
+  const visibleQuickUsers = safeUsers.filter((u) => {
+    if (selectedRoleFilter === 'Admin') return u.role === 'Admin';
+    if (selectedRoleFilter === 'Kasir') return u.role === 'Kasir';
+    return true;
+  });
 
   return (
     <div className="min-h-screen bg-[#070e1b] text-slate-100 flex flex-col justify-center items-center p-3 sm:p-6 relative overflow-hidden font-sans selection:bg-blue-600 selection:text-white">
@@ -204,9 +196,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
                   <ShieldCheck className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-xs text-white">Audit & Hak Akses Berjenjang</h3>
+                  <h3 className="font-bold text-xs text-white">Akun Admin & Kasir Resmi</h3>
                   <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
-                    Pemisahan otorisasi ketat antara Owner (audit keuangan & saldo bank) dan Kasir (pelayanan cepat).
+                    Admin dapat membuatkan kredensial akun kasir baru untuk operator shift harian.
                   </p>
                 </div>
               </div>
@@ -228,9 +220,9 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
                   <Fingerprint className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-xs text-white">Otomasi Saldo Kas & Rekening</h3>
+                  <h3 className="font-bold text-xs text-white">Otomasi Saldo & Google Sheets</h3>
                   <p className="text-[11px] text-slate-300 leading-relaxed mt-0.5">
-                    Sinkronisasi real-time saldo kas tunai & rekening bank untuk setiap transaksi setor, tarik, dan transfer.
+                    Sinkronisasi real-time seluruh transaksi, kas tunai, dan rekening bank ke spreadsheet.
                   </p>
                 </div>
               </div>
@@ -258,7 +250,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
                   Masuk ke Portal
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Gunakan kredensial Anda atau pilih akses cepat akun demo
+                  Masukkan username & password Anda atau pilih akun dari daftar di bawah
                 </p>
               </div>
               <div className="p-2.5 bg-blue-50 text-blue-700 rounded-2xl border border-blue-100 hidden sm:flex">
@@ -335,7 +327,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
                   <span>Simpan sesi masuk</span>
                 </label>
                 <span className="text-[11px] text-blue-700 font-semibold bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
-                  Demo Mode
+                  {users.length} Akun Tersedia
                 </span>
               </div>
 
@@ -359,45 +351,82 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
             </form>
           </div>
 
-          {/* Quick 1-Click Demo Accounts Section */}
+          {/* Quick 1-Click Login List from Real Users State */}
           <div className="pt-4 border-t border-slate-100 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                <span>Pilih Akun Demo (1-Klik Langsung Masuk)</span>
+                <span>Pilih Akun Terdaftar (1-Klik Masuk)</span>
               </span>
+
+              {/* Role filter buttons */}
+              <div className="flex items-center gap-1 text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => setSelectedRoleFilter('ALL')}
+                  className={`px-2 py-0.5 rounded cursor-pointer ${
+                    selectedRoleFilter === 'ALL'
+                      ? 'bg-slate-800 text-white'
+                      : 'text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  Semua
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRoleFilter('Admin')}
+                  className={`px-2 py-0.5 rounded cursor-pointer ${
+                    selectedRoleFilter === 'Admin'
+                      ? 'bg-blue-700 text-white'
+                      : 'text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  Admin
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedRoleFilter('Kasir')}
+                  className={`px-2 py-0.5 rounded cursor-pointer ${
+                    selectedRoleFilter === 'Kasir'
+                      ? 'bg-amber-600 text-white'
+                      : 'text-slate-500 hover:bg-slate-100'
+                  }`}
+                >
+                  Kasir
+                </button>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {DEMO_ACCOUNTS.map((acc) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1">
+              {visibleQuickUsers.map((acc) => {
                 const isAdmin = acc.role === 'Admin';
                 return (
                   <button
-                    key={acc.username}
+                    key={acc.id}
                     type="button"
-                    onClick={() => handleQuickDemoLogin(acc)}
+                    onClick={() => handleQuickLogin(acc)}
                     disabled={isLoading}
-                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2.5 relative group hover:-translate-y-0.5 hover:shadow-md ${
+                    className={`p-3 rounded-2xl border text-left transition-all cursor-pointer flex flex-col justify-between gap-2 relative group hover:-translate-y-0.5 hover:shadow-md ${
                       isAdmin
                         ? 'bg-blue-50/70 hover:bg-blue-100/80 border-blue-200/80'
                         : 'bg-amber-50/70 hover:bg-amber-100/80 border-amber-200/80'
                     }`}
                   >
                     <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center gap-2.5">
+                      <div className="flex items-center gap-2">
                         <div
-                          className={`p-2 rounded-xl text-white shadow-xs ${
+                          className={`p-1.5 rounded-xl text-white shadow-xs ${
                             isAdmin ? 'bg-blue-700' : 'bg-amber-600'
                           }`}
                         >
                           {isAdmin ? (
-                            <ShieldCheck className="w-4 h-4" />
+                            <ShieldCheck className="w-3.5 h-3.5" />
                           ) : (
-                            <UserCheck className="w-4 h-4" />
+                            <UserCheck className="w-3.5 h-3.5" />
                           )}
                         </div>
-                        <div>
-                          <span className="font-bold text-xs text-slate-900 block leading-tight">
+                        <div className="overflow-hidden">
+                          <span className="font-bold text-xs text-slate-900 block leading-tight truncate">
                             {acc.name}
                           </span>
                           <span
@@ -411,22 +440,18 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, onLoginSuccess })
                       </div>
                     </div>
 
-                    <p className="text-[11px] text-slate-600 leading-snug line-clamp-2">
-                      {acc.desc}
-                    </p>
-
                     <div className="text-[10px] font-mono bg-white/90 p-1.5 rounded-lg border border-slate-200/80 flex items-center justify-between text-slate-700">
-                      <span>User: <strong className="text-slate-900">{acc.username}</strong></span>
+                      <span>User: <strong className="text-slate-900">@{acc.username}</strong></span>
                       <span>Pass: <strong className="text-slate-900">{acc.password}</strong></span>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-200/60 text-[11px] font-bold">
-                      <span className={isAdmin ? 'text-blue-700' : 'text-amber-700'}>
-                        {acc.badge}
+                    <div className="flex items-center justify-between pt-0.5 text-[10px] font-bold">
+                      <span className="text-slate-500 truncate max-w-[120px]">
+                        {acc.notes || (isAdmin ? 'Owner Utama' : 'Operator')}
                       </span>
-                      <span className="text-slate-800 group-hover:text-blue-700 flex items-center gap-1 transition-colors">
-                        <span>Masuk</span>
-                        <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
+                      <span className="text-slate-800 group-hover:text-blue-700 flex items-center gap-0.5 transition-colors">
+                        <span>Pilih</span>
+                        <ArrowRight className="w-3 h-3 group-hover:translate-x-0.5 transition-transform" />
                       </span>
                     </div>
                   </button>

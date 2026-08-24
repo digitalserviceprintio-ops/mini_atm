@@ -94,6 +94,19 @@ export interface CashMutation {
 
 export type UserRole = 'Admin' | 'Kasir';
 
+export interface AppUser {
+  id: string;
+  username: string;
+  name: string;
+  password: string;
+  role: UserRole;
+  phone?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  createdAt: string;
+  notes?: string;
+  lastLogin?: string;
+}
+
 export type ActiveTab =
   | 'transaksi'
   | 'laporan-detail'

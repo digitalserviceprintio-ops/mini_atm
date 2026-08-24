@@ -3,6 +3,7 @@ import {
   ActiveTab,
   AgentProfile,
   Account,
+  AppUser,
   Product,
   Transaction,
   UserRole,
@@ -16,6 +17,7 @@ import {
   INITIAL_PRINTER_SETTINGS,
   INITIAL_PRODUCTS,
   INITIAL_TRANSACTIONS,
+  INITIAL_USERS,
 } from './data/initialData';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -36,6 +38,7 @@ import { ModalConfirmVoid } from './components/modals/ModalConfirmVoid';
 import { ModalAccount } from './components/modals/ModalAccount';
 import { ModalProduct } from './components/modals/ModalProduct';
 import { ModalMutation } from './components/modals/ModalMutation';
+import { ModalUserAccount } from './components/modals/ModalUserAccount';
 import { ModalLogout } from './components/modals/ModalLogout';
 import { exportToCSV, formatDateTime } from './utils/formatters';
 import {
@@ -48,6 +51,8 @@ import {
   syncDeleteAccountToSheets,
   syncProductToSheets,
   syncCheckoutPOSToSheets,
+  syncUserToSheets,
+  syncDeleteUserToSheets,
   syncProfileToSheets,
   syncPrinterSettingsToSheets,
   AppSyncData,
@@ -79,6 +84,11 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('miniatm_products');
     return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+  });
+
+  const [users, setUsers] = useState<AppUser[]>(() => {
+    const saved = localStorage.getItem('miniatm_users');
+    return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [mutations, setMutations] = useState<CashMutation[]>(() => {
@@ -116,6 +126,9 @@ export default function App() {
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
+  const [editingUser, setEditingUser] = useState<AppUser | null>(null);
+
   const [isMutationModalOpen, setIsMutationModalOpen] = useState<boolean>(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
 
@@ -132,6 +145,9 @@ export default function App() {
     }
     if (data.products && Array.isArray(data.products) && data.products.length > 0) {
       setProducts(data.products);
+    }
+    if (data.users && Array.isArray(data.users) && data.users.length > 0) {
+      setUsers(data.users);
     }
     if (data.profile) {
       setProfile(data.profile);
@@ -182,6 +198,10 @@ export default function App() {
   }, [mutations]);
 
   useEffect(() => {
+    localStorage.setItem('miniatm_users', JSON.stringify(users));
+  }, [users]);
+
+  useEffect(() => {
     localStorage.setItem('miniatm_printer_settings', JSON.stringify(printerSettings));
   }, [printerSettings]);
 
@@ -214,6 +234,100 @@ export default function App() {
     if (currentUser) {
       const updatedUser: AuthUser = { ...currentUser, role };
       setCurrentUser(updatedUser);
+    }
+  };
+
+  // User Management Handlers (Admin & Kasir)
+  const handleSaveUser = (userData: Partial<AppUser>) => {
+    if (userData.id) {
+      let updatedUser: AppUser | null = null;
+      setUsers((prev) => {
+        const next = prev.map((u) => {
+          if (u.id === userData.id) {
+            updatedUser = { ...u, ...userData } as AppUser;
+            return updatedUser;
+          }
+          return u;
+        });
+        return next;
+      });
+      if (updatedUser) {
+        syncUserToSheets(updatedUser);
+        if (
+          currentUser?.id === (updatedUser as AppUser).id ||
+          currentUser?.username === (updatedUser as AppUser).username
+        ) {
+          setCurrentUser((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  name: (updatedUser as AppUser).name,
+                  role: (updatedUser as AppUser).role,
+                }
+              : null
+          );
+          setCurrentRole((updatedUser as AppUser).role);
+        }
+      }
+    } else {
+      const newUser: AppUser = {
+        id: `usr_${Date.now()}`,
+        username: (userData.username || '').trim().toLowerCase(),
+        name: (userData.name || '').trim(),
+        password: userData.password || '123456',
+        role: userData.role || 'Kasir',
+        phone: userData.phone || '',
+        status: userData.status || 'ACTIVE',
+        createdAt: formatDateTime(),
+        notes: userData.notes || '',
+        lastLogin: '-',
+      };
+      setUsers((prev) => [...prev, newUser]);
+      syncUserToSheets(newUser);
+    }
+    setIsUserModalOpen(false);
+    setEditingUser(null);
+  };
+
+  const handleDeleteUser = (userId: string) => {
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    syncDeleteUserToSheets(userId);
+  };
+
+  const handleToggleUserStatus = (userId: string) => {
+    let changedUser: AppUser | null = null;
+    setUsers((prev) =>
+      prev.map((u) => {
+        if (u.id === userId) {
+          changedUser = { ...u, status: u.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE' };
+          return changedUser;
+        }
+        return u;
+      })
+    );
+    if (changedUser) {
+      syncUserToSheets(changedUser);
+    }
+  };
+
+  const handleSwitchActiveUser = (user: AppUser) => {
+    const initials = user.name
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .substring(0, 2)
+      .toUpperCase();
+    const auth: AuthUser = {
+      id: user.id,
+      username: user.username,
+      name: user.name,
+      role: user.role,
+      avatarInitials: initials || (user.role === 'Admin' ? 'AD' : 'KS'),
+    };
+    setCurrentUser(auth);
+    setCurrentRole(user.role);
+    if (user.role === 'Kasir') {
+      setActiveTab('transaksi');
     }
   };
 
@@ -273,8 +387,32 @@ export default function App() {
 
       setAccounts(updatedAccounts);
 
-      // Auto-sync real-time to Google Sheets
-      syncTransactionToSheets(newTrx, updatedAccounts);
+      // Create automatic cash flow mutation entry
+      let autoMutType: 'MASUK' | 'KELUAR' = 'MASUK';
+      let autoMutAmount = profit;
+      if (newTrx.type === 'SETOR TUNAI' || newTrx.type === 'PEMBAYARAN') {
+        autoMutType = 'MASUK';
+        autoMutAmount = newTrx.nominal + profit;
+      } else if (newTrx.type === 'TARIK TUNAI') {
+        autoMutType = 'KELUAR';
+        autoMutAmount = Math.max(0, newTrx.nominal - profit);
+      }
+
+      const autoMut: CashMutation = {
+        id: `MUT-${Date.now()}`,
+        time: newTrx.time,
+        accountId: newTrx.accountId,
+        type: autoMutType,
+        amount: autoMutAmount,
+        feeMargin: profit,
+        description: `Trx ${newTrx.type} #${newTrx.id} - ${newTrx.cust} (${newTrx.target})`,
+        relatedTrxId: newTrx.id,
+      };
+
+      setMutations((prev) => [autoMut, ...prev]);
+
+      // Auto-sync real-time to Google Sheets (Transactions, Accounts, and Mutations)
+      syncTransactionToSheets(newTrx, updatedAccounts, autoMut);
 
       // Auto preview receipt for freshly created transaction
       setReceiptTrx(newTrx);
@@ -294,7 +432,7 @@ export default function App() {
       prev.map((t) => (t.id === voidTrx.id ? { ...t, status: 'VOID' } : t))
     );
 
-    // Reverse balance effect if possible
+    // Reverse balance effect
     const profit = voidTrx.feeCust - voidTrx.feeAdmin;
     const updatedAccounts = accounts.map((acc) => {
       if (acc.id === voidTrx.accountId) {
@@ -311,8 +449,22 @@ export default function App() {
 
     setAccounts(updatedAccounts);
 
-    // Real-time void sync to Google Sheets
-    syncVoidToSheets(voidTrx.id, updatedAccounts);
+    // Create reversing mutation for void
+    const voidMut: CashMutation = {
+      id: `MUT-${Date.now()}`,
+      time: formatDateTime(),
+      accountId: voidTrx.accountId,
+      type: voidTrx.type === 'TARIK TUNAI' ? 'MASUK' : 'KELUAR',
+      amount: voidTrx.nominal,
+      feeMargin: 0,
+      description: `[BATAL/VOID] Trx #${voidTrx.id} - ${voidTrx.cust}`,
+      relatedTrxId: voidTrx.id,
+    };
+
+    setMutations((prev) => [voidMut, ...prev]);
+
+    // Real-time void sync to Google Sheets (Void status, Reverted Balances, and Void Mutation Log)
+    syncVoidToSheets(voidTrx.id, updatedAccounts, voidMut);
 
     setIsVoidModalOpen(false);
     setVoidTrx(null);
@@ -444,10 +596,23 @@ export default function App() {
     );
     setAccounts(updatedAccounts);
 
-    // 4. Auto-sync to Google Sheets
-    syncCheckoutPOSToSheets(updatedProducts, newTrx, updatedAccounts);
+    // 4. Create POS cash mutation
+    const posMut: CashMutation = {
+      id: `MUT-${Date.now()}`,
+      time: newTrx.time,
+      accountId: newTrx.accountId,
+      type: 'MASUK',
+      amount: total,
+      feeMargin: total,
+      description: `Penjualan Kasir POS #${newTrx.id} (${itemsSummary})`,
+      relatedTrxId: newTrx.id,
+    };
+    setMutations((prev) => [posMut, ...prev]);
 
-    // 5. Open receipt modal
+    // 5. Auto-sync to Google Sheets (Products, Transactions, Accounts, and Mutations)
+    syncCheckoutPOSToSheets(updatedProducts, newTrx, updatedAccounts, posMut);
+
+    // 6. Open receipt modal
     setReceiptTrx(newTrx);
     setIsReceiptModalOpen(true);
   };
@@ -496,7 +661,7 @@ export default function App() {
 
   // If user is not logged in, render the login page
   if (!currentUser) {
-    return <LoginView profile={profile} onLoginSuccess={handleLoginSuccess} />;
+    return <LoginView profile={profile} users={users} onLoginSuccess={handleLoginSuccess} />;
   }
 
   return (
@@ -526,6 +691,7 @@ export default function App() {
           onClose={() => setIsSidebarOpen(false)}
           profile={profile}
           trxCount={transactions.length}
+          userCount={users.length}
           currentUser={currentUser}
           onLogout={handleLogout}
         />
@@ -616,8 +782,22 @@ export default function App() {
 
           {activeTab === 'hak-akses' && (
             <HakAksesView
+              users={users}
+              currentUser={currentUser}
               currentRole={currentRole}
               setRole={handleRoleChange}
+              onSaveUser={handleSaveUser}
+              onDeleteUser={handleDeleteUser}
+              onToggleUserStatus={handleToggleUserStatus}
+              onSwitchActiveUser={handleSwitchActiveUser}
+              onOpenCreateUserModal={(defaultRole) => {
+                setEditingUser(null);
+                setIsUserModalOpen(true);
+              }}
+              onOpenEditUserModal={(user) => {
+                setEditingUser(user);
+                setIsUserModalOpen(true);
+              }}
             />
           )}
 
@@ -643,6 +823,7 @@ export default function App() {
               accounts={accounts}
               mutations={mutations}
               products={products}
+              users={users}
               profile={profile}
               printerSettings={printerSettings}
               currentRole={currentRole}
@@ -712,6 +893,17 @@ export default function App() {
         onClose={() => setIsMutationModalOpen(false)}
         onSave={handleSaveMutation}
         accounts={accounts}
+      />
+
+      <ModalUserAccount
+        isOpen={isUserModalOpen}
+        onClose={() => {
+          setIsUserModalOpen(false);
+          setEditingUser(null);
+        }}
+        onSave={handleSaveUser}
+        editingUser={editingUser}
+        existingUsers={users}
       />
 
       <ModalLogout

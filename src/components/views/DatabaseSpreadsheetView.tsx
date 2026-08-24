@@ -22,6 +22,7 @@ import {
 import {
   Account,
   AgentProfile,
+  AppUser,
   CashMutation,
   PrinterSettings,
   Product,
@@ -45,6 +46,7 @@ interface DatabaseSpreadsheetViewProps {
   accounts: Account[];
   mutations: CashMutation[];
   products: Product[];
+  users?: AppUser[];
   profile: AgentProfile;
   printerSettings: PrinterSettings;
   currentRole: UserRole;
@@ -56,6 +58,7 @@ export const DatabaseSpreadsheetView: React.FC<DatabaseSpreadsheetViewProps> = (
   accounts,
   mutations,
   products,
+  users = [],
   profile,
   printerSettings,
   currentRole,
@@ -76,7 +79,7 @@ export const DatabaseSpreadsheetView: React.FC<DatabaseSpreadsheetViewProps> = (
   const [isLoadingPush, setIsLoadingPush] = useState<boolean>(false);
   const [copiedCode, setCopiedCode] = useState<boolean>(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [activePreviewTab, setActivePreviewTab] = useState<'transaksi' | 'akun' | 'produk' | 'mutasi' | 'code'>('transaksi');
+  const [activePreviewTab, setActivePreviewTab] = useState<'transaksi' | 'akun' | 'produk' | 'mutasi' | 'pengguna' | 'code'>('transaksi');
 
   useEffect(() => {
     setUrlInput(getGasUrl());
@@ -162,6 +165,7 @@ export const DatabaseSpreadsheetView: React.FC<DatabaseSpreadsheetViewProps> = (
       accounts,
       mutations,
       products,
+      users,
       profile,
       printerSettings,
     });
@@ -472,6 +476,17 @@ export const DatabaseSpreadsheetView: React.FC<DatabaseSpreadsheetViewProps> = (
                 </button>
                 <button
                   type="button"
+                  onClick={() => setActivePreviewTab('pengguna')}
+                  className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
+                    activePreviewTab === 'pengguna'
+                      ? 'bg-blue-700 text-white shadow-xs'
+                      : 'text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Sheet Pengguna ({users.length})
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActivePreviewTab('code')}
                   className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors cursor-pointer ${
                     activePreviewTab === 'code'
@@ -648,6 +663,64 @@ export const DatabaseSpreadsheetView: React.FC<DatabaseSpreadsheetViewProps> = (
                         <tr>
                           <td colSpan={4} className="py-6 text-center text-slate-400 font-sans">
                             Belum ada catatan mutasi kas tersimpan.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {activePreviewTab === 'pengguna' && (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-200">
+                      <tr>
+                        <th className="py-2 px-3">ID User</th>
+                        <th className="py-2 px-3">Username</th>
+                        <th className="py-2 px-3">Nama Lengkap</th>
+                        <th className="py-2 px-3">Role</th>
+                        <th className="py-2 px-3">Status</th>
+                        <th className="py-2 px-3">No HP</th>
+                        <th className="py-2 px-3">Catatan</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {(users || []).map((u) => (
+                        <tr key={u.id} className="hover:bg-slate-50 font-mono text-[11px]">
+                          <td className="py-2 px-3 text-slate-500 font-bold">{u.id}</td>
+                          <td className="py-2 px-3 font-bold text-blue-700">@{u.username}</td>
+                          <td className="py-2 px-3 font-sans font-semibold text-slate-800">{u.name}</td>
+                          <td className="py-2 px-3 font-sans">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                u.role === 'Admin'
+                                  ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                  : 'bg-blue-100 text-blue-800 border border-blue-200'
+                              }`}
+                            >
+                              {u.role}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 font-sans">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                u.status === 'ACTIVE'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-200 text-slate-700'
+                              }`}
+                            >
+                              {u.status}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-slate-600">{u.phone || '-'}</td>
+                          <td className="py-2 px-3 font-sans text-slate-500 max-w-[200px] truncate">{u.notes || '-'}</td>
+                        </tr>
+                      ))}
+                      {(!users || users.length === 0) && (
+                        <tr>
+                          <td colSpan={7} className="py-6 text-center text-slate-400 font-sans">
+                            Belum ada akun pengguna tersimpan.
                           </td>
                         </tr>
                       )}

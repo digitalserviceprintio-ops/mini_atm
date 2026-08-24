@@ -28,6 +28,7 @@ var SHEET_TRANSAKSI = "Transaksi";
 var SHEET_AKUN_KAS = "AkunKas";
 var SHEET_MUTASI_KAS = "MutasiKas";
 var SHEET_PRODUK = "Produk";
+var SHEET_PENGGUNA = "Pengguna";
 var SHEET_PROFIL = "ProfilAgen";
 var SHEET_SETTING_PRINTER = "SettingPrinter";
 var SHEET_LOG = "LogAktivitas";
@@ -102,12 +103,18 @@ function doPost(e) {
         if (payload.accounts && Array.isArray(payload.accounts)) {
           saveAllAccounts(ss, payload.accounts);
         }
+        if (payload.mutation) {
+          saveMutation(ss, payload.mutation);
+        }
         break;
         
       case "voidTransaction":
         result.transaction = voidTransaction(ss, payload.transactionId);
         if (payload.accounts && Array.isArray(payload.accounts)) {
           saveAllAccounts(ss, payload.accounts);
+        }
+        if (payload.mutation) {
+          saveMutation(ss, payload.mutation);
         }
         break;
         
@@ -140,6 +147,9 @@ function doPost(e) {
         if (payload.accounts && Array.isArray(payload.accounts)) {
           saveAllAccounts(ss, payload.accounts);
         }
+        if (payload.mutation) {
+          saveMutation(ss, payload.mutation);
+        }
         result.message = "Checkout POS berhasil disimpan";
         break;
         
@@ -151,12 +161,21 @@ function doPost(e) {
         result.printerSettings = savePrinterSettings(ss, payload.printerSettings);
         break;
         
+      case "saveUser":
+        result.user = saveOrUpdateUser(ss, payload.user);
+        break;
+        
+      case "deleteUser":
+        result.deletedId = deleteUser(ss, payload.userId);
+        break;
+        
       case "syncAll":
         // Batch sync seluruh data aplikasi
         if (payload.transactions) saveAllTransactions(ss, payload.transactions);
         if (payload.accounts) saveAllAccounts(ss, payload.accounts);
         if (payload.mutations) saveAllMutations(ss, payload.mutations);
         if (payload.products) saveAllProducts(ss, payload.products);
+        if (payload.users) saveAllUsers(ss, payload.users);
         if (payload.profile) saveProfile(ss, payload.profile);
         if (payload.printerSettings) savePrinterSettings(ss, payload.printerSettings);
         result.message = "Sinkronisasi batch seluruh data berhasil!";
@@ -215,17 +234,22 @@ function initAllSheets(ss) {
     "ID Produk", "Nama Produk", "Harga Jual (Rp)", "Stok", "Kategori", "Barcode"
   ], "#059669");
 
-  // 5. Profil Agen
+  // 5. Pengguna (Admin & Kasir)
+  getOrCreateSheet(ss, SHEET_PENGGUNA, [
+    "ID User", "Username", "Nama Lengkap", "Password", "Role", "Status", "No HP", "Tanggal Dibuat", "Catatan", "Terakhir Login"
+  ], "#B45309");
+
+  // 6. Profil Agen
   getOrCreateSheet(ss, SHEET_PROFIL, [
     "Kunci Parameter", "Nilai", "Keterangan"
   ], "#D97706");
 
-  // 6. Setting Printer
+  // 7. Setting Printer
   getOrCreateSheet(ss, SHEET_SETTING_PRINTER, [
     "Kunci Konfigurasi", "Nilai", "Keterangan"
   ], "#7C3AED");
 
-  // 7. Log Aktivitas
+  // 8. Log Aktivitas
   getOrCreateSheet(ss, SHEET_LOG, [
     "Timestamp", "Aksi", "Payload Cuplikan"
   ], "#475569");
@@ -254,6 +278,7 @@ function fetchAllAppData(ss) {
     accounts: readSheetAccounts(ss),
     mutations: readSheetMutations(ss),
     products: readSheetProducts(ss),
+    users: readSheetUsers(ss),
     profile: readSheetProfile(ss),
     printerSettings: readSheetPrinterSettings(ss)
   };
@@ -344,6 +369,30 @@ function readSheetProducts(ss) {
       stock: Number(r[3]) || 0,
       category: String(r[4] || "Pulsa/Paket"),
       barcode: String(r[5] || "")
+    });
+  }
+  return result;
+}
+
+function readSheetUsers(ss) {
+  var sheet = ss.getSheetByName(SHEET_PENGGUNA);
+  if (!sheet || sheet.getLastRow() <= 1) return [];
+  var rows = sheet.getRange(2, 1, sheet.getLastRow() - 1, 10).getValues();
+  var result = [];
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i];
+    if (!r[0]) continue;
+    result.push({
+      id: String(r[0]),
+      username: String(r[1] || ""),
+      name: String(r[2] || ""),
+      password: String(r[3] || ""),
+      role: String(r[4] || "Kasir"),
+      status: String(r[5] || "ACTIVE"),
+      phone: String(r[6] || ""),
+      createdAt: String(r[7] || ""),
+      notes: String(r[8] || ""),
+      lastLogin: String(r[9] || "")
     });
   }
   return result;
@@ -676,6 +725,77 @@ function saveAllProducts(ss, list) {
     rows.push([p.id, p.name, Number(p.price) || 0, Number(p.stock) || 0, p.category || "Umum", p.barcode || ""]);
   }
   sheet.getRange(2, 1, rows.length, 6).setValues(rows);
+}
+
+function saveOrUpdateUser(ss, user) {
+  if (!user || !user.id) return null;
+  var sheet = ss.getSheetByName(SHEET_PENGGUNA);
+  var rowData = [
+    user.id,
+    user.username || "",
+    user.name || "",
+    user.password || "",
+    user.role || "Kasir",
+    user.status || "ACTIVE",
+    user.phone || "",
+    user.createdAt || new Date().toISOString(),
+    user.notes || "",
+    user.lastLogin || ""
+  ];
+  var lastRow = sheet.getLastRow();
+  var foundRow = -1;
+  if (lastRow > 1) {
+    var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(user.id)) {
+        foundRow = i + 2;
+        break;
+      }
+    }
+  }
+  if (foundRow > 0) {
+    sheet.getRange(foundRow, 1, 1, rowData.length).setValues([rowData]);
+  } else {
+    sheet.appendRow(rowData);
+  }
+  return user;
+}
+
+function deleteUser(ss, userId) {
+  if (!userId) return null;
+  var sheet = ss.getSheetByName(SHEET_PENGGUNA);
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= 1) return userId;
+  var ids = sheet.getRange(2, 1, lastRow - 1, 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(userId)) {
+      sheet.deleteRow(i + 2);
+      break;
+    }
+  }
+  return userId;
+}
+
+function saveAllUsers(ss, list) {
+  if (!list || !Array.isArray(list)) return;
+  var sheet = ss.getSheetByName(SHEET_PENGGUNA);
+  sheet.clearContents();
+  sheet.appendRow([
+    "ID User", "Username", "Nama Lengkap", "Password", "Role", "Status", "No HP", "Tanggal Dibuat", "Catatan", "Terakhir Login"
+  ]);
+  var headerRange = sheet.getRange(1, 1, 1, 10);
+  headerRange.setFontWeight("bold").setBackground("#B45309").setFontColor("#FFFFFF");
+
+  if (list.length === 0) return;
+  var rows = [];
+  for (var i = 0; i < list.length; i++) {
+    var u = list[i];
+    rows.push([
+      u.id, u.username || "", u.name || "", u.password || "", u.role || "Kasir",
+      u.status || "ACTIVE", u.phone || "", u.createdAt || "", u.notes || "", u.lastLogin || ""
+    ]);
+  }
+  sheet.getRange(2, 1, rows.length, 10).setValues(rows);
 }
 
 function logActivity(ss, action, preview) {
