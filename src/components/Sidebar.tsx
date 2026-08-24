@@ -75,7 +75,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
               <div className="overflow-hidden">
                 <h1 className="font-bold text-sm leading-tight text-white truncate">{profile.storeName}</h1>
-                <p className="text-[10px] text-blue-200 font-medium truncate">Agen BRILink & Mini ATM</p>
+                <p className="text-[10px] text-blue-200 font-medium truncate">Agen Link Bersama & Mini ATM</p>
               </div>
             </div>
             <button
