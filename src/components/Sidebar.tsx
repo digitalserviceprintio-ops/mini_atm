@@ -1,0 +1,282 @@
+import React from 'react';
+import {
+  CreditCard,
+  X,
+  LayoutDashboard,
+  ListOrdered,
+  FileBarChart,
+  ArrowLeftRight,
+  Wallet,
+  ShoppingCart,
+  ShieldCheck,
+  Store,
+  Printer,
+  ChevronDown,
+  LogOut,
+  FileSpreadsheet,
+} from 'lucide-react';
+import { ActiveTab, AgentProfile } from '../types';
+import { AuthUser } from './views/LoginView';
+
+interface SidebarProps {
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab) => void;
+  isOpen: boolean;
+  onClose: () => void;
+  profile: AgentProfile;
+  trxCount: number;
+  currentUser?: AuthUser | null;
+  onLogout?: () => void;
+}
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  activeTab,
+  setActiveTab,
+  isOpen,
+  onClose,
+  profile,
+  trxCount,
+  currentUser,
+  onLogout,
+}) => {
+  const handleSelectTab = (tab: ActiveTab) => {
+    setActiveTab(tab);
+    if (window.innerWidth < 1024) {
+      onClose();
+    }
+  };
+
+  return (
+    <>
+      {/* Mobile Backdrop */}
+      {isOpen && (
+        <div
+          onClick={onClose}
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-30 lg:hidden"
+          aria-hidden="true"
+        />
+      )}
+
+      <aside
+        id="sidebar"
+        className={`fixed lg:static inset-y-0 left-0 z-40 w-64 bg-[#003366] text-white transform ${
+          isOpen ? 'translate-x-0' : '-translate-x-full'
+        } lg:translate-x-0 transition-transform duration-200 ease-in-out flex flex-col justify-between shadow-xl lg:shadow-none select-none`}
+      >
+        <div className="p-4 space-y-5 overflow-y-auto">
+          {/* Brand Heading */}
+          <div className="flex items-center justify-between pb-3.5 border-b border-blue-900/80">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 bg-blue-600 rounded-lg shadow-xs">
+                <CreditCard className="w-5 h-5 text-white" />
+              </div>
+              <div className="overflow-hidden">
+                <h1 className="font-bold text-sm leading-tight text-white truncate">{profile.storeName}</h1>
+                <p className="text-[10px] text-blue-200 font-medium truncate">Agen BRILink & Mini ATM</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="lg:hidden text-blue-200 hover:text-white p-1 rounded-md cursor-pointer"
+              aria-label="Close sidebar"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Navigation Links */}
+          <nav className="space-y-1 text-xs">
+            <button
+              onClick={() => handleSelectTab('dashboard')}
+              id="nav-dashboard"
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                  : 'text-blue-100 hover:bg-blue-700/60'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4 text-blue-300" />
+              <span className="flex-1">Dashboard Insights</span>
+            </button>
+
+            {/* Submenu Transaksi Agen */}
+            <div className="space-y-1 pt-2">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300 flex items-center justify-between">
+                <span>TRANSAKSI AGEN</span>
+                <ChevronDown className="w-3.5 h-3.5 text-blue-400" />
+              </div>
+
+              <button
+                onClick={() => handleSelectTab('transaksi')}
+                id="nav-transaksi"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'transaksi'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <ListOrdered className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Daftar Transaksi</span>
+                <span className="bg-blue-900/90 text-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                  {trxCount}
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('laporan-detail')}
+                id="nav-laporan-detail"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'laporan-detail'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <FileBarChart className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Laporan Detail & Grafik</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('arus-kas')}
+                id="nav-arus-kas"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'arus-kas'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <ArrowLeftRight className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Arus Kas & Mutasi</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('akun-kas')}
+                id="nav-akun-kas"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'akun-kas'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <Wallet className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Akun Kas / Rekening</span>
+              </button>
+            </div>
+
+            {/* Submenu Operasional */}
+            <div className="space-y-1 pt-3">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300">
+                <span>OPERASIONAL LAIN</span>
+              </div>
+
+              <button
+                onClick={() => handleSelectTab('kasir-fisik')}
+                id="nav-kasir-fisik"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'kasir-fisik'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <ShoppingCart className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Kasir Penjualan Fisik</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('hak-akses')}
+                id="nav-hak-akses"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'hak-akses'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <ShieldCheck className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Kelola Role (Admin & Kasir)</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('profil-agen')}
+                id="nav-profil-agen"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'profil-agen'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <Store className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Setting Profil Agen</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('setting-printer')}
+                id="nav-setting-printer"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'setting-printer'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <Printer className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Setting Printer Thermal</span>
+                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
+                  Cepat
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('database-spreadsheet')}
+                id="nav-database-spreadsheet"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'database-spreadsheet'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                <span className="flex-1">Database Spreadsheet</span>
+                <span className="bg-blue-900/60 text-blue-200 text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-400/30">
+                  GAS
+                </span>
+              </button>
+            </div>
+          </nav>
+        </div>
+
+        {/* Footer Sidebar Status & Active User with Logout */}
+        <div className="p-3.5 border-t border-blue-900/80 bg-[#002244]/80 space-y-3">
+          {currentUser && (
+            <div className="flex items-center justify-between bg-blue-950/60 p-2 rounded-xl border border-blue-800/40">
+              <div className="overflow-hidden pr-2">
+                <span className="text-[11px] font-bold text-white block truncate leading-tight">
+                  {currentUser.name}
+                </span>
+                <span className="text-[10px] text-blue-300 font-medium">
+                  Role: {currentUser.role}
+                </span>
+              </div>
+              {onLogout && (
+                <button
+                  type="button"
+                  onClick={onLogout}
+                  title="Keluar dari sesi"
+                  className="p-1.5 text-rose-300 hover:text-rose-100 hover:bg-rose-900/40 rounded-lg transition-colors shrink-0 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between pt-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-[11px] text-blue-200 font-medium">Sistem Online</span>
+            </div>
+            <span className="text-[10px] text-blue-400 font-mono">v2.5</span>
+          </div>
+        </div>
+      </aside>
+    </>
+  );
+};
+
