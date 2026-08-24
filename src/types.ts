@@ -117,4 +117,5 @@ export type ActiveTab =
   | 'hak-akses'
   | 'profil-agen'
   | 'setting-printer'
-  | 'database-spreadsheet';
+  | 'database-spreadsheet'
+  | 'backup-reset';

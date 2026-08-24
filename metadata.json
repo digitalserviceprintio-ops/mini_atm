@@ -1,6 +1,6 @@
 {
-  "name": "Pencatatan Transaksi Mini ATM & BRILink",
-  "description": "Sistem pencatatan transaksi agen BRILink & Mini ATM, backend cloud Google Apps Script & Google Sheets, analisis laporan visual, arus kas multi-rekening, kasir POS fisik, dan cetak struk thermal.",
+  "name": "Pencatatan Transaksi Mini ATM ",
+  "description": "Sistem pencatatan transaksi agen Link & Mini ATM, backend cloud Google Apps Script & Google Sheets, analisis laporan visual, arus kas multi-rekening, kasir POS fisik, dan cetak struk thermal.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

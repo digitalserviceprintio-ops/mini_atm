@@ -1,4 +1,5 @@
 import { Transaction, AgentProfile, Account } from '../types';
+import { exportTransactionsToExcel } from './excelExport';
 
 export function formatRp(num: number | string | null | undefined): string {
   const n = typeof num === 'string' ? parseFloat(num) : num;
@@ -69,24 +70,9 @@ export function calculateFeeSuggestion(type: string, nominal: number): { feeCust
   return { feeCust, feeAdmin };
 }
 
-export function exportToCSV(transactions: Transaction[], accounts: Account[]): void {
-  const accountMap = new Map(accounts.map(a => [a.id, a.name]));
-  let csv = 'ID Transaksi,Waktu,Tipe,Nasabah,Tujuan,Rekening,Nominal,Biaya Customer,Biaya Admin,Net Profit,Status,No Ref\n';
-
-  transactions.forEach(t => {
-    const net = t.feeCust - t.feeAdmin;
-    const accName = accountMap.get(t.accountId) || 'Utama';
-    csv += `"${t.id}","${t.time}","${t.type}","${t.cust}","${t.target}","${accName}",${t.nominal},${t.feeCust},${t.feeAdmin},${net},"${t.status}","${t.refNumber || ''}"\n`;
-  });
-
-  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  const dateStr = new Date().toISOString().slice(0, 10);
-  link.setAttribute('download', `Laporan_Transaksi_MiniATM_${dateStr}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+export function exportToCSV(transactions: Transaction[], accounts: Account[], profile?: AgentProfile): void {
+  // Directly export formatted .xlsx Excel file
+  exportTransactionsToExcel(transactions, accounts, profile);
 }
 
 export function createWhatsAppReceiptMessage(t: Transaction, profile: AgentProfile): string {
