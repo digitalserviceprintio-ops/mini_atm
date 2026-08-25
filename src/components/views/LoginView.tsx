@@ -286,7 +286,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, users = [], onLog
                   <span>Simpan sesi masuk</span>
                 </label>
                 <span className="text-[11px] text-slate-500">
-                  Autentikasi Aman
+                  Autentikasi Aman 100%
                 </span>
               </div>
 
@@ -311,7 +311,7 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, users = [], onLog
           </div>
 
           <div className="mt-8 pt-4 border-t border-slate-100 flex items-center justify-center text-[11px] text-slate-400 text-center">
-            <span>Sistem Terminal Transaksi Kasir Agen & POS Ritel</span>
+            <span>Sistem Terminal Pencatatan Transaksi Kasir Agen MINI ATM & POS Ritel</span>
           </div>
         </div>
       </div>
