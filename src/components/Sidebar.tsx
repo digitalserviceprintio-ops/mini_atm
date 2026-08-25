@@ -280,7 +280,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span className="text-[11px] text-blue-200 font-medium">Sistem Online</span>
             </div>
-            <span className="text-[10px] text-blue-400 font-mono">v2.5</span>
+            <span className="text-[10px] text-blue-400 font-mono">v1.0</span>
           </div>
         </div>
       </aside>
