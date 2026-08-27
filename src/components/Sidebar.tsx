@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   CreditCard,
   X,
@@ -21,9 +21,12 @@ import {
   RotateCcw,
   Package,
   TrendingUp,
+  Sparkles,
 } from 'lucide-react';
 import { ActiveTab, AgentProfile, UserRole } from '../types';
 import { AuthUser } from './views/LoginView';
+import { useAppVersion } from '../utils/versionManager';
+import { ModalVersionInfo } from './modals/ModalVersionInfo';
 
 interface SidebarProps {
   activeTab: ActiveTab;
@@ -50,6 +53,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   currentRole = 'Admin',
   onLogout,
 }) => {
+  const { version, enterpriseVersion } = useAppVersion();
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
   const effectiveRole: UserRole = currentUser?.role || currentRole;
   const isAdmin = effectiveRole === 'Admin';
 
@@ -400,10 +405,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
               <span className="text-[11px] text-blue-200 font-medium">Sistem Online</span>
             </div>
-            <span className="text-[10px] text-blue-400 font-mono">v1.0</span>
+            <button
+              type="button"
+              onClick={() => setIsVersionModalOpen(true)}
+              title={`${enterpriseVersion} - Klik untuk melihat info & log pembaruan`}
+              className="text-[10px] text-blue-300 hover:text-white font-mono bg-blue-950/70 hover:bg-blue-900/80 px-2 py-0.5 rounded border border-blue-800/60 transition-colors flex items-center gap-1 cursor-pointer"
+            >
+              <Sparkles className="w-2.5 h-2.5 text-sky-400" />
+              <span>{version}</span>
+            </button>
           </div>
         </div>
       </aside>
+
+      {/* Modal Informasi Versi & Auto-Increment Log */}
+      <ModalVersionInfo
+        isOpen={isVersionModalOpen}
+        onClose={() => setIsVersionModalOpen(false)}
+      />
     </>
   );
 };

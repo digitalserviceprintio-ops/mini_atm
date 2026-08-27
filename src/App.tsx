@@ -73,6 +73,7 @@ import {
   syncPrinterSettingsToSheets,
   AppSyncData,
 } from './utils/googleSheetsService';
+import { recordVersionChange } from './utils/versionManager';
 import { ShieldAlert, ArrowLeft, Lock } from 'lucide-react';
 
 export default function App() {
@@ -361,6 +362,7 @@ export default function App() {
       });
       if (updatedUser) {
         syncUserToSheets(updatedUser);
+        recordVersionChange(`Pembaruan data pengguna ${(updatedUser as AppUser).name}`, 'USER');
         if (
           currentUser?.id === (updatedUser as AppUser).id ||
           currentUser?.username === (updatedUser as AppUser).username
@@ -392,14 +394,17 @@ export default function App() {
       };
       setUsers((prev) => [...prev, newUser]);
       syncUserToSheets(newUser);
+      recordVersionChange(`Penambahan pengguna baru ${newUser.name} (${newUser.role})`, 'USER');
     }
     setIsUserModalOpen(false);
     setEditingUser(null);
   };
 
   const handleDeleteUser = (userId: string) => {
+    const target = users.find((u) => u.id === userId);
     setUsers((prev) => prev.filter((u) => u.id !== userId));
     syncDeleteUserToSheets(userId);
+    recordVersionChange(`Hapus akun pengguna ${target?.name || userId}`, 'USER');
   };
 
   const handleToggleUserStatus = (userId: string) => {
@@ -454,6 +459,7 @@ export default function App() {
         });
         if (updatedTrx) {
           syncTransactionToSheets(updatedTrx, accounts);
+          recordVersionChange(`Pembaruan transaksi #${trxData.id}`, 'TRANSACTION');
         }
         return next;
       });
@@ -521,6 +527,7 @@ export default function App() {
 
       // Auto-sync real-time to Google Sheets (Transactions, Accounts, and Mutations)
       syncTransactionToSheets(newTrx, updatedAccounts, autoMut);
+      recordVersionChange(`Transaksi baru #${newTrx.id} (${newTrx.type}) Rp ${newTrx.nominal.toLocaleString('id-ID')}`, 'TRANSACTION');
 
       // Auto preview receipt for freshly created transaction
       setReceiptTrx(newTrx);
@@ -573,6 +580,7 @@ export default function App() {
 
     // Real-time void sync to Google Sheets (Void status, Reverted Balances, and Void Mutation Log)
     syncVoidToSheets(voidTrx.id, updatedAccounts, voidMut);
+    recordVersionChange(`Batal/VOID transaksi #${voidTrx.id} (${voidTrx.cust})`, 'TRANSACTION');
 
     setIsVoidModalOpen(false);
     setVoidTrx(null);
@@ -592,6 +600,7 @@ export default function App() {
         });
         if (updatedAcc) {
           syncAccountToSheets(updatedAcc);
+          recordVersionChange(`Pembaruan akun kas ${(updatedAcc as Account).name}`, 'ACCOUNT');
         }
         return next;
       });
@@ -606,6 +615,7 @@ export default function App() {
       };
       setAccounts((prev) => [...prev, newAcc]);
       syncAccountToSheets(newAcc);
+      recordVersionChange(`Tambah akun kas baru ${newAcc.name}`, 'ACCOUNT');
     }
   };
 
@@ -629,6 +639,7 @@ export default function App() {
     if (window.confirm(confirmMsg)) {
       setAccounts((prev) => prev.filter((a) => a.id !== id));
       syncDeleteAccountToSheets(id);
+      recordVersionChange(`Hapus akun kas ${targetAcc.name}`, 'ACCOUNT');
       if (editingAccount?.id === id) {
         setIsAccountModalOpen(false);
         setEditingAccount(null);
@@ -650,6 +661,7 @@ export default function App() {
         });
         if (updatedProd) {
           syncProductToSheets(updatedProd);
+          recordVersionChange(`Pembaruan data produk ${(updatedProd as Product).name}`, 'PRODUCT');
         }
         return next;
       });
@@ -668,6 +680,7 @@ export default function App() {
       };
       setProducts((prev) => [...prev, newProd]);
       syncProductToSheets(newProd);
+      recordVersionChange(`Tambah produk baru ${newProd.name}`, 'PRODUCT');
     }
   };
 
@@ -677,6 +690,7 @@ export default function App() {
     if (window.confirm(`Hapus produk "${target.name}" dari katalog?`)) {
       setProducts((prev) => prev.filter((p) => p.id !== id));
       syncDeleteProductToSheets(id);
+      recordVersionChange(`Hapus produk ${target.name}`, 'PRODUCT');
       if (editingProduct?.id === id) {
         setIsProductModalOpen(false);
         setEditingProduct(null);
@@ -725,6 +739,7 @@ export default function App() {
     };
     setStockLogs((prev) => [newLog, ...prev]);
     syncStockLogToSheets(newLog);
+    recordVersionChange(`Restock ${targetProd.name} (+${qtyToAdd} ${targetProd.unit})`, 'STOCK');
 
     // 3. Create cash mutation if totalCost > 0 and primary account exists
     if (totalCost > 0 && accounts.length > 0) {
@@ -783,6 +798,7 @@ export default function App() {
     };
     setStockLogs((prev) => [newLog, ...prev]);
     syncStockLogToSheets(newLog);
+    recordVersionChange(`Penyesuaian stok ${targetProd.name} (-${qtyToDeduct} ${targetProd.unit})`, 'STOCK');
   };
 
   // Checkout POS action
@@ -915,6 +931,7 @@ export default function App() {
 
     // 7. Auto-sync to Google Sheets (Products, POS Sale, Stock Logs, Transaction, Accounts, Mutation)
     syncCheckoutPOSToSheets(updatedProducts, newTrx, updatedAccounts, posMut, newPosSale, newStockLogs);
+    recordVersionChange(`Penjualan POS #${saleId} (${totalQty} item) Rp ${total.toLocaleString('id-ID')}`, 'TRANSACTION');
 
     // 8. Open receipt modal
     setReceiptTrx(newTrx);
@@ -987,6 +1004,7 @@ export default function App() {
       );
       setAccounts(updatedAccounts);
     }
+    recordVersionChange(`Batal/VOID penjualan POS #${saleId}`, 'TRANSACTION');
   };
 
   const handleRegisterUser = (userData: Partial<AppUser>) => {
@@ -1017,6 +1035,7 @@ export default function App() {
       };
       setUsers((prev) => [...prev, newUser]);
       syncUserToSheets(newUser);
+      recordVersionChange(`Registrasi user baru ${newUser.name} (${newUser.role})`, 'USER');
       return { success: true, message: 'Akun berhasil didaftarkan.' };
     } catch (e: any) {
       return { success: false, message: e?.message || 'Terjadi kesalahan saat mendaftar.' };
@@ -1049,16 +1068,19 @@ export default function App() {
 
     setAccounts(updatedAccounts);
     syncMutationToSheets(mut, updatedAccounts);
+    recordVersionChange(`Mutasi kas ${mut.type} Rp ${mut.amount.toLocaleString('id-ID')} (${mut.description})`, 'ACCOUNT');
   };
 
   const handleUpdateProfile = (newProf: AgentProfile) => {
     setProfile(newProf);
     syncProfileToSheets(newProf);
+    recordVersionChange(`Pembaruan profil outlet agen "${newProf.storeName}"`, 'SETTING');
   };
 
   const handleUpdatePrinterSettings = (newSet: PrinterSettings) => {
     setPrinterSettings(newSet);
     syncPrinterSettingsToSheets(newSet);
+    recordVersionChange(`Pembaruan pengaturan printer struk thermal (${newSet.paperWidth})`, 'SETTING');
   };
 
   const handleExportCSV = () => {

@@ -14,6 +14,8 @@ import {
   Store,
 } from 'lucide-react';
 import { AgentProfile, AppUser, UserRole } from '../../types';
+import { useAppVersion } from '../../utils/versionManager';
+import { ModalVersionInfo } from '../modals/ModalVersionInfo';
 
 export interface AuthUser {
   id?: string;
@@ -30,6 +32,8 @@ interface LoginViewProps {
 }
 
 export const LoginView: React.FC<LoginViewProps> = ({ profile, users = [], onLoginSuccess }) => {
+  const { enterpriseVersion, version } = useAppVersion();
+  const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
   const [username, setUsername] = useState<string>('');
   const [password, setPassword] = useState<string>('');
   const [showPassword, setShowPassword] = useState<boolean>(false);
@@ -193,9 +197,14 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, users = [], onLog
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
               <span>Sistem Siap Digunakan</span>
             </span>
-            <span className="font-mono text-slate-400 bg-slate-900/80 px-2 py-0.5 rounded border border-slate-800">
-              Enterprise v2.5
-            </span>
+            <button
+              type="button"
+              onClick={() => setIsVersionModalOpen(true)}
+              title={`${enterpriseVersion} (${version}) - Klik untuk info versi`}
+              className="font-mono text-blue-300 hover:text-white bg-slate-900/80 hover:bg-slate-800/90 px-2.5 py-0.5 rounded border border-blue-800/50 transition-colors text-[11px] cursor-pointer"
+            >
+              {enterpriseVersion}
+            </button>
           </div>
         </div>
 
@@ -315,6 +324,12 @@ export const LoginView: React.FC<LoginViewProps> = ({ profile, users = [], onLog
           </div>
         </div>
       </div>
+
+      {/* Modal Version Info */}
+      <ModalVersionInfo
+        isOpen={isVersionModalOpen}
+        onClose={() => setIsVersionModalOpen(false)}
+      />
     </div>
   );
 };
