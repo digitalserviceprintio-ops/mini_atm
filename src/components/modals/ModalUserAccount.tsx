@@ -114,10 +114,10 @@ export const ModalUserAccount: React.FC<ModalUserAccountProps> = ({
       id: editingUser ? editingUser.id : undefined,
       name: cleanName,
       username: cleanUsername,
-      password: password.trim(),
+      password: (password || '').trim(),
       role,
-      phone: phone.trim(),
-      notes: notes.trim(),
+      phone: (phone || '').trim(),
+      notes: (notes || '').trim(),
       status,
     });
 

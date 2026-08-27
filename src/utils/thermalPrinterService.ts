@@ -58,8 +58,9 @@ export const VALID_BLE_PRINTER_SERVICES = [
 ];
 
 export function isInIframe(): boolean {
+  if (typeof window === 'undefined') return false;
   try {
-    return typeof window !== 'undefined' && window.self !== window.top;
+    return window.self !== window.top;
   } catch {
     return true;
   }

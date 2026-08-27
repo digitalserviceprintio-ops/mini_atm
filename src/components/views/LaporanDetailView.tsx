@@ -42,14 +42,14 @@ ChartJS.register(
 );
 
 interface LaporanDetailViewProps {
-  transactions: Transaction[];
-  accounts: Account[];
+  transactions?: Transaction[];
+  accounts?: Account[];
   onExportCSV: () => void;
 }
 
 export const LaporanDetailView: React.FC<LaporanDetailViewProps> = ({
-  transactions,
-  accounts,
+  transactions = [],
+  accounts = [],
   onExportCSV,
 }) => {
   const [filterType, setFilterType] = useState<string>('ALL');
@@ -58,7 +58,7 @@ export const LaporanDetailView: React.FC<LaporanDetailViewProps> = ({
   const [filterSearch, setFilterSearch] = useState<string>('');
 
   const accountMap = useMemo(() => {
-    return new Map(accounts.map((a) => [a.id, a.name]));
+    return new Map((accounts || []).map((a) => [a.id, a.name]));
   }, [accounts]);
 
   const resetFilters = () => {
@@ -69,15 +69,16 @@ export const LaporanDetailView: React.FC<LaporanDetailViewProps> = ({
   };
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((t) => {
+    return (transactions || []).filter((t) => {
+      if (!t) return false;
       const matchType = filterType === 'ALL' || t.type === filterType;
       const matchAcc = filterAccount === 'ALL' || t.accountId === filterAccount;
       const matchStatus = filterStatus === 'ALL' || t.status === filterStatus;
       const q = filterSearch.toLowerCase().trim();
       const matchSearch =
         !q ||
-        t.cust.toLowerCase().includes(q) ||
-        t.target.toLowerCase().includes(q) ||
+        (t.cust && t.cust.toLowerCase().includes(q)) ||
+        (t.target && t.target.toLowerCase().includes(q)) ||
         t.id.toLowerCase().includes(q) ||
         (t.notes && t.notes.toLowerCase().includes(q));
 

@@ -10,6 +10,9 @@ import {
   CashMutation,
   CartItem,
   PrinterSettings,
+  PosSale,
+  PosSaleItem,
+  StockAdjustmentLog,
 } from './types';
 import {
   INITIAL_ACCOUNTS,
@@ -18,6 +21,8 @@ import {
   INITIAL_PRODUCTS,
   INITIAL_TRANSACTIONS,
   INITIAL_USERS,
+  INITIAL_POS_SALES,
+  INITIAL_STOCK_LOGS,
 } from './data/initialData';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -28,19 +33,26 @@ import { DashboardView } from './components/views/DashboardView';
 import { ArusKasView } from './components/views/ArusKasView';
 import { AkunKasView } from './components/views/AkunKasView';
 import { KasirFisikView } from './components/views/KasirFisikView';
+import { StokBarangView } from './components/views/StokBarangView';
+import { LaporanPenjualanFisikView } from './components/views/LaporanPenjualanFisikView';
 import { HakAksesView } from './components/views/HakAksesView';
 import { ProfilAgenView } from './components/views/ProfilAgenView';
 import { SettingPrinterView } from './components/views/SettingPrinterView';
 import { DatabaseSpreadsheetView } from './components/views/DatabaseSpreadsheetView';
+import { BackupResetView } from './components/views/BackupResetView';
 import { ModalTrx } from './components/modals/ModalTrx';
 import { ModalReceipt } from './components/modals/ModalReceipt';
 import { ModalConfirmVoid } from './components/modals/ModalConfirmVoid';
 import { ModalAccount } from './components/modals/ModalAccount';
 import { ModalProduct } from './components/modals/ModalProduct';
+import { ModalRestock } from './components/modals/ModalRestock';
+import { ModalAdjustStock } from './components/modals/ModalAdjustStock';
 import { ModalMutation } from './components/modals/ModalMutation';
 import { ModalUserAccount } from './components/modals/ModalUserAccount';
 import { ModalLogout } from './components/modals/ModalLogout';
+import { ModalResetData, ResetScope } from './components/modals/ModalResetData';
 import { exportToCSV, formatDateTime } from './utils/formatters';
+import { downloadBackupJSON, AppBackupPayload } from './utils/backupService';
 import {
   getGasUrl,
   fetchInitialDataFromSheets,
@@ -50,13 +62,18 @@ import {
   syncAccountToSheets,
   syncDeleteAccountToSheets,
   syncProductToSheets,
+  syncDeleteProductToSheets,
+  syncStockLogToSheets,
   syncCheckoutPOSToSheets,
+  syncPosSaleToSheets,
+  syncVoidPosSaleToSheets,
   syncUserToSheets,
   syncDeleteUserToSheets,
   syncProfileToSheets,
   syncPrinterSettingsToSheets,
   AppSyncData,
 } from './utils/googleSheetsService';
+import { ShieldAlert, ArrowLeft, Lock } from 'lucide-react';
 
 export default function App() {
   // Authentication state
@@ -84,6 +101,16 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(() => {
     const saved = localStorage.getItem('miniatm_products');
     return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
+  });
+
+  const [posSales, setPosSales] = useState<PosSale[]>(() => {
+    const saved = localStorage.getItem('miniatm_pos_sales');
+    return saved ? JSON.parse(saved) : INITIAL_POS_SALES;
+  });
+
+  const [stockLogs, setStockLogs] = useState<StockAdjustmentLog[]>(() => {
+    const saved = localStorage.getItem('miniatm_stock_logs');
+    return saved ? JSON.parse(saved) : INITIAL_STOCK_LOGS;
   });
 
   const [users, setUsers] = useState<AppUser[]>(() => {
@@ -125,12 +152,20 @@ export default function App() {
 
   const [isProductModalOpen, setIsProductModalOpen] = useState<boolean>(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [initialProductBarcode, setInitialProductBarcode] = useState<string>('');
+
+  const [isRestockModalOpen, setIsRestockModalOpen] = useState<boolean>(false);
+  const [selectedRestockProduct, setSelectedRestockProduct] = useState<Product | null>(null);
+
+  const [isAdjustModalOpen, setIsAdjustModalOpen] = useState<boolean>(false);
+  const [selectedAdjustProduct, setSelectedAdjustProduct] = useState<Product | null>(null);
 
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
 
   const [isMutationModalOpen, setIsMutationModalOpen] = useState<boolean>(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
+  const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
 
   // Apply loaded data from Google Sheets to application state
   const handleApplyDataFromSheets = (data: AppSyncData) => {
@@ -146,6 +181,12 @@ export default function App() {
     if (data.products && Array.isArray(data.products) && data.products.length > 0) {
       setProducts(data.products);
     }
+    if (data.posSales && Array.isArray(data.posSales) && data.posSales.length > 0) {
+      setPosSales(data.posSales);
+    }
+    if (data.stockLogs && Array.isArray(data.stockLogs) && data.stockLogs.length > 0) {
+      setStockLogs(data.stockLogs);
+    }
     if (data.users && Array.isArray(data.users) && data.users.length > 0) {
       setUsers(data.users);
     }
@@ -155,6 +196,65 @@ export default function App() {
     if (data.printerSettings) {
       setPrinterSettings(data.printerSettings);
     }
+  };
+
+  // Restore backup payload handler
+  const handleRestoreData = (payload: AppBackupPayload) => {
+    if (payload.transactions && Array.isArray(payload.transactions)) {
+      setTransactions(payload.transactions);
+    }
+    if (payload.accounts && Array.isArray(payload.accounts)) {
+      setAccounts(payload.accounts);
+    }
+    if (payload.mutations && Array.isArray(payload.mutations)) {
+      setMutations(payload.mutations);
+    }
+    if (payload.products && Array.isArray(payload.products)) {
+      setProducts(payload.products);
+    }
+    if (payload.users && Array.isArray(payload.users)) {
+      setUsers(payload.users);
+    }
+    if (payload.profile) {
+      setProfile(payload.profile);
+    }
+    if (payload.printerSettings) {
+      setPrinterSettings(payload.printerSettings);
+    }
+  };
+
+  // Download backup handler
+  const handleDownloadBackup = () => {
+    downloadBackupJSON({
+      profile,
+      printerSettings,
+      accounts,
+      transactions,
+      mutations,
+      products,
+      users,
+    });
+  };
+
+  // Execute database reset handler
+  const handleConfirmReset = (scope: ResetScope) => {
+    if (scope === 'transactions_only') {
+      setTransactions([]);
+      setMutations([]);
+    } else if (scope === 'factory_default') {
+      setTransactions(INITIAL_TRANSACTIONS);
+      setMutations([]);
+      setAccounts(INITIAL_ACCOUNTS);
+      setProducts(INITIAL_PRODUCTS);
+      setProfile(INITIAL_AGENT_PROFILE);
+      setPrinterSettings(INITIAL_PRINTER_SETTINGS);
+    } else if (scope === 'clear_all') {
+      setTransactions([]);
+      setMutations([]);
+      setProducts([]);
+      setAccounts(INITIAL_ACCOUNTS.map((a) => ({ ...a, balance: 0 })));
+    }
+    setIsResetModalOpen(false);
   };
 
   // Auto-initialize data from Google Sheets on boot if GAS URL configured
@@ -192,6 +292,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('miniatm_products', JSON.stringify(products));
   }, [products]);
+
+  useEffect(() => {
+    localStorage.setItem('miniatm_pos_sales', JSON.stringify(posSales));
+  }, [posSales]);
+
+  useEffect(() => {
+    localStorage.setItem('miniatm_stock_logs', JSON.stringify(stockLogs));
+  }, [stockLogs]);
 
   useEffect(() => {
     localStorage.setItem('miniatm_mutations', JSON.stringify(mutations));
@@ -528,7 +636,7 @@ export default function App() {
     }
   };
 
-  // Product POS Handlers
+  // Product POS & Inventory Handlers
   const handleSaveProduct = (prodData: Partial<Product>) => {
     if (prodData.id) {
       let updatedProd: Product | null = null;
@@ -550,71 +658,369 @@ export default function App() {
         id: `P0${products.length + 1}`,
         name: prodData.name || 'Produk Baru',
         price: prodData.price || 0,
+        buyPrice: prodData.buyPrice !== undefined ? prodData.buyPrice : (prodData.price || 0) * 0.8,
         stock: prodData.stock || 0,
+        minStock: prodData.minStock || 5,
+        unit: prodData.unit || 'Pcs',
+        barcode: prodData.barcode || undefined,
         category: prodData.category || 'Pulsa/Paket',
+        lastRestockDate: new Date().toISOString().split('T')[0],
       };
       setProducts((prev) => [...prev, newProd]);
       syncProductToSheets(newProd);
     }
   };
 
+  const handleDeleteProduct = (id: string) => {
+    const target = products.find((p) => p.id === id);
+    if (!target) return;
+    if (window.confirm(`Hapus produk "${target.name}" dari katalog?`)) {
+      setProducts((prev) => prev.filter((p) => p.id !== id));
+      syncDeleteProductToSheets(id);
+      if (editingProduct?.id === id) {
+        setIsProductModalOpen(false);
+        setEditingProduct(null);
+      }
+    }
+  };
+
+  const handleRestockProduct = (
+    productId: string,
+    qtyToAdd: number,
+    newBuyPrice?: number,
+    supplierOrNotes?: string
+  ) => {
+    const targetProd = products.find((p) => p.id === productId);
+    if (!targetProd) return;
+
+    const previousStock = targetProd.stock;
+    const currentStock = previousStock + qtyToAdd;
+    const effectiveBuyPrice = newBuyPrice !== undefined ? newBuyPrice : (targetProd.buyPrice || targetProd.price * 0.8);
+    const totalCost = effectiveBuyPrice * qtyToAdd;
+
+    // 1. Update product stock and price
+    const updatedProd: Product = {
+      ...targetProd,
+      stock: currentStock,
+      buyPrice: effectiveBuyPrice,
+      lastRestockDate: new Date().toISOString().split('T')[0],
+    };
+
+    setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProd : p)));
+    syncProductToSheets(updatedProd);
+
+    // 2. Add Stock Log
+    const newLog: StockAdjustmentLog = {
+      id: `LOG-RST-${Date.now()}`,
+      time: formatDateTime(),
+      productId,
+      productName: targetProd.name,
+      type: 'RESTOCK_MASUK',
+      qtyChange: qtyToAdd,
+      stockBefore: previousStock,
+      stockAfter: currentStock,
+      costPerUnit: effectiveBuyPrice,
+      reason: supplierOrNotes || 'Restock pengadaan barang baru',
+      operatorName: currentUser?.name || 'Administrator',
+    };
+    setStockLogs((prev) => [newLog, ...prev]);
+    syncStockLogToSheets(newLog);
+
+    // 3. Create cash mutation if totalCost > 0 and primary account exists
+    if (totalCost > 0 && accounts.length > 0) {
+      const primaryAcc = accounts[0];
+      const mut: CashMutation = {
+        id: `MUT-RST-${Date.now()}`,
+        time: formatDateTime(),
+        accountId: primaryAcc.id,
+        type: 'KELUAR',
+        amount: totalCost,
+        feeMargin: 0,
+        description: `Restock Stok: ${targetProd.name} (+${qtyToAdd} unit @ ${effectiveBuyPrice.toLocaleString('id-ID')})`,
+        relatedTrxId: newLog.id,
+      };
+      setMutations((prev) => [mut, ...prev]);
+      const updatedAccounts = accounts.map((acc) =>
+        acc.id === primaryAcc.id ? { ...acc, balance: acc.balance - totalCost } : acc
+      );
+      setAccounts(updatedAccounts);
+      syncMutationToSheets(mut, updatedAccounts);
+    }
+  };
+
+  const handleAdjustStock = (
+    productId: string,
+    qtyToDeduct: number,
+    reason: string,
+    adjustmentType: 'KOREKSI_RUSAK' | 'KOREKSI_HILANG' | 'KOREKSI_KADALUARSA' | 'PENYESUAIAN_KOREKSI'
+  ) => {
+    const targetProd = products.find((p) => p.id === productId);
+    if (!targetProd) return;
+
+    const previousStock = targetProd.stock;
+    const currentStock = Math.max(0, previousStock - qtyToDeduct);
+
+    const updatedProd: Product = {
+      ...targetProd,
+      stock: currentStock,
+    };
+
+    setProducts((prev) => prev.map((p) => (p.id === productId ? updatedProd : p)));
+    syncProductToSheets(updatedProd);
+
+    // Add Stock Log
+    const newLog: StockAdjustmentLog = {
+      id: `LOG-ADJ-${Date.now()}`,
+      time: formatDateTime(),
+      productId,
+      productName: targetProd.name,
+      type: adjustmentType,
+      qtyChange: -qtyToDeduct,
+      stockBefore: previousStock,
+      stockAfter: currentStock,
+      reason,
+      operatorName: currentUser?.name || 'Administrator',
+    };
+    setStockLogs((prev) => [newLog, ...prev]);
+    syncStockLogToSheets(newLog);
+  };
+
   // Checkout POS action
-  const handleCheckoutPOS = (cart: CartItem[], total: number) => {
-    // 1. Deduct stock for each purchased item
+  const handleCheckoutPOS = (
+    cart: CartItem[],
+    total: number,
+    paymentMethod: string = 'Tunai',
+    customerName?: string,
+    notes?: string
+  ) => {
+    const saleId = `POS-${Date.now().toString().slice(-6)}`;
+    const invoiceNum = `INV-${Date.now().toString().slice(-8)}`;
+    const saleTime = formatDateTime();
+
+    // 1. Calculate items, costs, and profit
+    let totalCost = 0;
+    let totalQty = 0;
+    const saleItems: PosSaleItem[] = cart.map((c) => {
+      const prod = products.find((p) => p.id === c.id);
+      const buyPrice = c.buyPrice !== undefined ? c.buyPrice : (prod?.buyPrice !== undefined ? prod.buyPrice : c.price * 0.8);
+      const itemCost = buyPrice * c.qty;
+      const subtotal = c.price * c.qty;
+      const profit = subtotal - itemCost;
+      totalCost += itemCost;
+      totalQty += c.qty;
+
+      return {
+        productId: c.id,
+        productName: c.name,
+        category: c.category || prod?.category || 'Umum',
+        qty: c.qty,
+        unit: c.unit || prod?.unit || 'Pcs',
+        price: c.price,
+        buyPrice,
+        subtotal,
+        totalCost: itemCost,
+        profit,
+      };
+    });
+
+    const totalProfit = total - totalCost;
+
+    // 2. Deduct stock for each purchased item
+    const newStockLogs: StockAdjustmentLog[] = [];
     const updatedProducts = products.map((prod) => {
       const item = cart.find((c) => c.id === prod.id);
       if (item) {
-        return { ...prod, stock: Math.max(0, prod.stock - item.qty) };
+        const previousStock = prod.stock;
+        const currentStock = Math.max(0, prod.stock - item.qty);
+
+        newStockLogs.push({
+          id: `LOG-POS-${Date.now()}-${prod.id}`,
+          time: saleTime,
+          productId: prod.id,
+          productName: prod.name,
+          type: 'PENJUALAN_POS',
+          qtyChange: -item.qty,
+          stockBefore: previousStock,
+          stockAfter: currentStock,
+          reason: `Penjualan Kasir #${saleId}`,
+          operatorName: currentUser?.name || 'Kasir',
+        });
+
+        return { ...prod, stock: currentStock };
       }
       return prod;
     });
+
     setProducts(updatedProducts);
+    setStockLogs((prev) => [...newStockLogs, ...prev]);
+
+    // 3. Save PosSale record
+    const newPosSale: PosSale = {
+      id: saleId,
+      invoiceNumber: invoiceNum,
+      time: saleTime,
+      cashierName: currentUser?.name || 'Kasir',
+      cashierRole: currentRole,
+      customerName: customerName || 'Pelanggan Umum',
+      items: saleItems,
+      totalQty,
+      totalRevenue: total,
+      totalCost,
+      grossProfit: totalProfit,
+      paymentMethod,
+      accountId: accounts[0]?.id || 'acc1',
+      status: 'SUCCESS',
+      notes,
+    };
+    setPosSales((prev) => [newPosSale, ...prev]);
 
     const itemsSummary = cart.map((c) => `${c.name} (${c.qty}x)`).join(', ');
 
-    // 2. Add as transaction
+    // 4. Add as financial transaction
     const newTrx: Transaction = {
       id: `TRX-${transactions.length + 101}`,
-      time: formatDateTime(),
+      time: saleTime,
       type: 'PEMBAYARAN',
-      cust: 'Pelanggan Kasir POS',
-      target: 'Penjualan Barang / Pulsa',
+      cust: customerName || 'Pelanggan Kasir POS',
+      target: 'Penjualan Barang Fisik / POS',
       nominal: total,
       feeCust: 0,
       feeAdmin: 0,
       status: 'SUCCESS',
       accountId: accounts[0]?.id || 'acc1',
-      notes: `POS: ${itemsSummary}`,
-      refNumber: `POS-${Date.now().toString().slice(-6)}`,
+      notes: `POS #${saleId}: ${itemsSummary} (Laba: Rp ${totalProfit.toLocaleString('id-ID')})`,
+      refNumber: saleId,
     };
 
     setTransactions((prev) => [newTrx, ...prev]);
 
-    // 3. Add to account balance
+    // 5. Add to account balance
     const updatedAccounts = accounts.map((acc) =>
       acc.id === newTrx.accountId ? { ...acc, balance: acc.balance + total } : acc
     );
     setAccounts(updatedAccounts);
 
-    // 4. Create POS cash mutation
+    // 6. Create POS cash mutation
     const posMut: CashMutation = {
       id: `MUT-${Date.now()}`,
       time: newTrx.time,
       accountId: newTrx.accountId,
       type: 'MASUK',
       amount: total,
-      feeMargin: total,
-      description: `Penjualan Kasir POS #${newTrx.id} (${itemsSummary})`,
+      feeMargin: totalProfit,
+      description: `Penjualan Kasir POS #${saleId} [${paymentMethod}] (${itemsSummary})`,
       relatedTrxId: newTrx.id,
     };
     setMutations((prev) => [posMut, ...prev]);
 
-    // 5. Auto-sync to Google Sheets (Products, Transactions, Accounts, and Mutations)
-    syncCheckoutPOSToSheets(updatedProducts, newTrx, updatedAccounts, posMut);
+    // 7. Auto-sync to Google Sheets (Products, POS Sale, Stock Logs, Transaction, Accounts, Mutation)
+    syncCheckoutPOSToSheets(updatedProducts, newTrx, updatedAccounts, posMut, newPosSale, newStockLogs);
 
-    // 6. Open receipt modal
+    // 8. Open receipt modal
     setReceiptTrx(newTrx);
     setIsReceiptModalOpen(true);
+  };
+
+  const handleVoidPosSale = (saleId: string) => {
+    const targetSale = posSales.find((s) => s.id === saleId);
+    if (!targetSale) return;
+
+    if (
+      !window.confirm(
+        `Batalkan (VOID) transaksi kasir #${saleId}? Stok barang akan dikembalikan dan kas akan disesuaikan.`
+      )
+    ) {
+      return;
+    }
+
+    // 1. Mark sale as VOID
+    setPosSales((prev) =>
+      prev.map((s) => (s.id === saleId ? { ...s, status: 'VOID' as const } : s))
+    );
+    syncVoidPosSaleToSheets(saleId);
+
+    // 2. Return product stocks
+    const newStockLogs: StockAdjustmentLog[] = [];
+    const updatedProducts = products.map((prod) => {
+      const soldItem = targetSale.items.find((item) => item.productId === prod.id);
+      if (soldItem) {
+        const previousStock = prod.stock;
+        const currentStock = previousStock + soldItem.qty;
+
+        newStockLogs.push({
+          id: `LOG-VOID-${Date.now()}-${prod.id}`,
+          time: formatDateTime(),
+          productId: prod.id,
+          productName: prod.name,
+          type: 'PENYESUAIAN_KOREKSI',
+          qtyChange: soldItem.qty,
+          stockBefore: previousStock,
+          stockAfter: currentStock,
+          reason: `Batal / VOID Transaksi Kasir #${saleId}`,
+          operatorName: currentUser?.name || 'Kasir',
+        });
+
+        return { ...prod, stock: currentStock };
+      }
+      return prod;
+    });
+
+    setProducts(updatedProducts);
+    setStockLogs((prev) => [...newStockLogs, ...prev]);
+
+    // 3. Deduct account balance & create negative mutation
+    if (accounts.length > 0) {
+      const primaryAcc = accounts[0];
+      const mut: CashMutation = {
+        id: `MUT-VOID-${Date.now()}`,
+        time: formatDateTime(),
+        accountId: primaryAcc.id,
+        type: 'KELUAR',
+        amount: targetSale.totalRevenue,
+        feeMargin: 0,
+        description: `Batal (VOID) Transaksi POS #${saleId}`,
+        relatedTrxId: saleId,
+      };
+      setMutations((prev) => [mut, ...prev]);
+      const updatedAccounts = accounts.map((acc) =>
+        acc.id === primaryAcc.id ? { ...acc, balance: acc.balance - targetSale.totalRevenue } : acc
+      );
+      setAccounts(updatedAccounts);
+    }
+  };
+
+  const handleRegisterUser = (userData: Partial<AppUser>) => {
+    try {
+      const trimmedUser = (userData.username || '').trim().toLowerCase();
+      const trimmedName = (userData.name || '').trim();
+      const trimmedPin = (userData.password || '').trim();
+
+      if (!trimmedName || !trimmedUser || !trimmedPin) {
+        return { success: false, message: 'Nama, username, dan kata sandi wajib diisi.' };
+      }
+
+      const isDuplicate = users.some((u) => u.username.toLowerCase() === trimmedUser);
+      if (isDuplicate) {
+        return { success: false, message: `Username "${trimmedUser}" sudah digunakan.` };
+      }
+
+      const newUser: AppUser = {
+        id: `usr_${Date.now()}`,
+        username: trimmedUser,
+        name: trimmedName,
+        password: trimmedPin,
+        role: userData.role || 'Kasir',
+        status: 'ACTIVE',
+        phone: userData.phone ? userData.phone.trim() : '',
+        notes: userData.notes ? userData.notes.trim() : undefined,
+        createdAt: new Date().toISOString(),
+      };
+      setUsers((prev) => [...prev, newUser]);
+      syncUserToSheets(newUser);
+      return { success: true, message: 'Akun berhasil didaftarkan.' };
+    } catch (e: any) {
+      return { success: false, message: e?.message || 'Terjadi kesalahan saat mendaftar.' };
+    }
   };
 
   // Cash Mutation Handler
@@ -661,7 +1067,14 @@ export default function App() {
 
   // If user is not logged in, render the login page
   if (!currentUser) {
-    return <LoginView profile={profile} users={users} onLoginSuccess={handleLoginSuccess} />;
+    return (
+      <LoginView
+        profile={profile}
+        users={users}
+        onLoginSuccess={handleLoginSuccess}
+        onRegisterUser={handleRegisterUser}
+      />
+    );
   }
 
   return (
@@ -693,11 +1106,45 @@ export default function App() {
           trxCount={transactions.length}
           userCount={users.length}
           currentUser={currentUser}
+          currentRole={currentRole}
           onLogout={handleLogout}
         />
 
         {/* Main Content Area */}
         <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full space-y-6">
+          {/* Strict Role Guard: Check if Kasir attempts to open Admin-only pages */}
+          {currentRole === 'Kasir' &&
+            [
+              'dashboard',
+              'arus-kas',
+              'akun-kas',
+              'hak-akses',
+              'profil-agen',
+              'database-spreadsheet',
+              'backup-reset',
+            ].includes(activeTab) && (
+              <div className="bg-white p-8 rounded-2xl border border-amber-200 shadow-sm text-center max-w-xl mx-auto space-y-4 my-8">
+                <div className="w-14 h-14 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">Akses Terbatas Khusus Admin (Owner)</h2>
+                  <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+                    Halaman ini memuat data finansial, rekening master, atau pengaturan sistem yang hanya dapat diakses oleh Administrator / Pemilik Toko.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button
+                    onClick={() => setActiveTab('transaksi')}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 bg-blue-700 hover:bg-blue-800 text-white text-sm font-semibold rounded-xl transition-all shadow-xs cursor-pointer"
+                  >
+                    <ArrowLeft className="w-4 h-4" />
+                    <span>Kembali ke Menu Kasir (Transaksi)</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
           {activeTab === 'transaksi' && (
             <TransaksiView
               transactions={transactions}
@@ -727,10 +1174,12 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'dashboard' && (
+          {activeTab === 'dashboard' && currentRole === 'Admin' && (
             <DashboardView
               transactions={transactions}
               accounts={accounts}
+              products={products}
+              posSales={posSales}
               onOpenNewTrx={() => {
                 setEditingTrx(null);
                 setIsTrxModalOpen(true);
@@ -743,7 +1192,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'arus-kas' && (
+          {activeTab === 'arus-kas' && currentRole === 'Admin' && (
             <ArusKasView
               transactions={transactions}
               accounts={accounts}
@@ -752,7 +1201,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'akun-kas' && (
+          {activeTab === 'akun-kas' && currentRole === 'Admin' && (
             <AkunKasView
               accounts={accounts}
               currentRole={currentRole}
@@ -772,15 +1221,65 @@ export default function App() {
             <KasirFisikView
               products={products}
               currentRole={currentRole}
-              onOpenNewProduct={() => {
+              operatorName={currentUser?.name || 'Kasir'}
+              onOpenNewProduct={(initialBarcode) => {
                 setEditingProduct(null);
+                setInitialProductBarcode(typeof initialBarcode === 'string' ? initialBarcode : '');
                 setIsProductModalOpen(true);
               }}
+              onNavigateToStock={() => setActiveTab('stok-barang')}
+              onNavigateToReport={() => setActiveTab('laporan-penjualan-fisik')}
               onCheckoutPOS={handleCheckoutPOS}
+              onOpenRestock={(p) => {
+                setSelectedRestockProduct(p);
+                setIsRestockModalOpen(true);
+              }}
             />
           )}
 
-          {activeTab === 'hak-akses' && (
+          {activeTab === 'stok-barang' && (
+            <StokBarangView
+              products={products}
+              stockLogs={stockLogs}
+              currentRole={currentRole}
+              operatorName={currentUser?.name || 'Operator'}
+              onOpenNewProduct={(initialBarcode) => {
+                setEditingProduct(null);
+                setInitialProductBarcode(typeof initialBarcode === 'string' ? initialBarcode : '');
+                setIsProductModalOpen(true);
+              }}
+              onEditProduct={(p) => {
+                setEditingProduct(p);
+                setInitialProductBarcode('');
+                setIsProductModalOpen(true);
+              }}
+              onDeleteProduct={handleDeleteProduct}
+              onRestock={(p) => {
+                setSelectedRestockProduct(p);
+                setIsRestockModalOpen(true);
+              }}
+              onAdjustStock={(p) => {
+                setSelectedAdjustProduct(p);
+                setIsAdjustModalOpen(true);
+              }}
+              onNavigateToPOS={() => setActiveTab('kasir-fisik')}
+            />
+          )}
+
+          {activeTab === 'laporan-penjualan-fisik' && (
+            <LaporanPenjualanFisikView
+              posSales={posSales}
+              sales={posSales}
+              products={products}
+              currentRole={currentRole}
+              operatorName={currentUser?.name || 'Kasir'}
+              onVoidSale={handleVoidPosSale}
+              onNavigateToPOS={() => setActiveTab('kasir-fisik')}
+              onNavigateToStock={() => setActiveTab('stok-barang')}
+            />
+          )}
+
+          {activeTab === 'hak-akses' && currentRole === 'Admin' && (
             <HakAksesView
               users={users}
               currentUser={currentUser}
@@ -801,7 +1300,7 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'profil-agen' && (
+          {activeTab === 'profil-agen' && currentRole === 'Admin' && (
             <ProfilAgenView
               profile={profile}
               onSaveProfile={handleUpdateProfile}
@@ -817,17 +1316,34 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'database-spreadsheet' && (
+          {activeTab === 'database-spreadsheet' && currentRole === 'Admin' && (
             <DatabaseSpreadsheetView
               transactions={transactions}
               accounts={accounts}
               mutations={mutations}
               products={products}
+              posSales={posSales}
+              stockLogs={stockLogs}
               users={users}
               profile={profile}
               printerSettings={printerSettings}
               currentRole={currentRole}
               onApplyDataFromSheets={handleApplyDataFromSheets}
+            />
+          )}
+
+          {activeTab === 'backup-reset' && currentRole === 'Admin' && (
+            <BackupResetView
+              transactions={transactions}
+              mutations={mutations}
+              accounts={accounts}
+              products={products}
+              users={users}
+              profile={profile}
+              printerSettings={printerSettings}
+              currentRole={currentRole}
+              onRestoreData={handleRestoreData}
+              onOpenResetModal={() => setIsResetModalOpen(true)}
             />
           )}
         </main>
@@ -883,9 +1399,35 @@ export default function App() {
         onClose={() => {
           setIsProductModalOpen(false);
           setEditingProduct(null);
+          setInitialProductBarcode('');
         }}
         onSave={handleSaveProduct}
+        onDelete={handleDeleteProduct}
         editingProduct={editingProduct}
+        initialBarcode={initialProductBarcode}
+      />
+
+      <ModalRestock
+        isOpen={isRestockModalOpen}
+        onClose={() => {
+          setIsRestockModalOpen(false);
+          setSelectedRestockProduct(null);
+        }}
+        onConfirmRestock={handleRestockProduct}
+        product={selectedRestockProduct}
+        products={products}
+        operatorName={currentUser?.name || 'Operator'}
+        onSelectProduct={(p) => setSelectedRestockProduct(p)}
+      />
+
+      <ModalAdjustStock
+        isOpen={isAdjustModalOpen}
+        onClose={() => {
+          setIsAdjustModalOpen(false);
+          setSelectedAdjustProduct(null);
+        }}
+        onConfirmAdjustment={handleAdjustStock}
+        product={selectedAdjustProduct}
       />
 
       <ModalMutation
@@ -911,6 +1453,18 @@ export default function App() {
         onClose={() => setIsLogoutModalOpen(false)}
         onConfirm={handleConfirmLogout}
         user={currentUser}
+      />
+
+      <ModalResetData
+        isOpen={isResetModalOpen}
+        onClose={() => setIsResetModalOpen(false)}
+        onConfirmReset={handleConfirmReset}
+        onDownloadBackup={handleDownloadBackup}
+        profile={profile}
+        trxCount={transactions.length}
+        mutationCount={mutations.length}
+        productCount={products.length}
+        userCount={users.length}
       />
     </div>
   );

@@ -4,7 +4,6 @@ import {
   ChevronRight,
   FileSpreadsheet,
   PlusCircle,
-  Calendar,
   ShieldCheck,
   UserCheck,
   LogOut,
@@ -12,10 +11,12 @@ import {
   CheckCircle2,
   AlertCircle,
   Database,
+  Lock,
 } from 'lucide-react';
 import { AgentProfile, UserRole } from '../types';
 import { AuthUser } from './views/LoginView';
 import { subscribeSyncState, SyncState } from '../utils/googleSheetsService';
+import { DigitalClock } from './common/DigitalClock';
 
 interface HeaderProps {
   profile: AgentProfile;
@@ -56,14 +57,18 @@ export const Header: React.FC<HeaderProps> = ({
     return unsubscribe;
   }, []);
 
-  const initials = currentUser?.avatarInitials || (profile.ownerName
-    ? profile.ownerName
-        .split(' ')
-        .map((n) => n[0])
-        .join('')
-        .substring(0, 2)
-        .toUpperCase()
-    : 'CS');
+  const isUserAdmin = (currentUser?.role || currentRole) === 'Admin';
+
+  const initials =
+    currentUser?.avatarInitials ||
+    (profile.ownerName
+      ? profile.ownerName
+          .split(' ')
+          .map((n) => n[0])
+          .join('')
+          .substring(0, 2)
+          .toUpperCase()
+      : 'AD');
 
   const todayStr = new Date().toLocaleDateString('id-ID', {
     day: 'numeric',
@@ -84,7 +89,13 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-lg bg-blue-700 text-white flex items-center justify-center font-bold text-xs overflow-hidden border border-blue-600 shadow-xs">
+          <div
+            className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs overflow-hidden border shadow-xs ${
+              isUserAdmin
+                ? 'bg-blue-700 text-white border-blue-600'
+                : 'bg-amber-600 text-white border-amber-500'
+            }`}
+          >
             {profile.logoUrl ? (
               <img src={profile.logoUrl} className="w-full h-full object-cover" alt="Profile" />
             ) : (
@@ -102,41 +113,55 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       <div className="flex items-center gap-2 sm:gap-3">
-        {/* Active Role Selector Switcher */}
-        <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
-          <span className="text-[11px] font-semibold px-2 text-slate-500 hidden md:inline">Mode Akses:</span>
-          <button
-            onClick={() => setRole('Admin')}
-            id="btnRoleAdmin"
-            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-              currentRole === 'Admin'
-                ? 'bg-blue-700 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <ShieldCheck className="w-3.5 h-3.5" />
-            <span>Admin</span>
-          </button>
-          <button
-            onClick={() => setRole('Kasir')}
-            id="btnRoleKasir"
-            className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
-              currentRole === 'Kasir'
-                ? 'bg-amber-600 text-white shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>Kasir</span>
-          </button>
-        </div>
+        {/* Role Display Badge or Admin Simulator Toggle */}
+        {currentUser?.role === 'Kasir' ? (
+          /* Kasir Badge (No unauthorized toggle) */
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-xs font-bold shadow-xs">
+            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+            <span>Kasir Shift</span>
+          </div>
+        ) : (
+          /* Admin / Owner Role Mode Switcher */
+          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+            <span className="text-[11px] font-semibold px-2 text-slate-500 hidden md:inline">
+              Mode:
+            </span>
+            <button
+              onClick={() => setRole('Admin')}
+              id="btnRoleAdmin"
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                currentRole === 'Admin'
+                  ? 'bg-blue-700 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Admin (Owner)</span>
+            </button>
+            <button
+              onClick={() => setRole('Kasir')}
+              id="btnRoleKasir"
+              title="Uji tampilan antarmuka kasir"
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                currentRole === 'Kasir'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5" />
+              <span>Pratinjau Kasir</span>
+            </button>
+          </div>
+        )}
 
         {/* Google Sheets Backend Sync Indicator */}
         <button
-          onClick={onNavigateToSpreadsheet}
+          onClick={isUserAdmin ? onNavigateToSpreadsheet : undefined}
           id="btnHeaderGasSync"
           title={
-            syncState.status === 'synced'
+            !isUserAdmin
+              ? `Status Spreadsheet: ${syncState.status === 'synced' ? 'Tersambung Aktif' : 'Operasional Standalone'}`
+              : syncState.status === 'synced'
               ? `Tersambung ke Google Sheet: ${syncState.spreadsheetName || 'Aktif'} (Terakhir sync: ${syncState.lastSyncedAt || 'baru saja'})`
               : syncState.status === 'syncing'
               ? 'Sedang menyinkronkan data ke Google Spreadsheet...'
@@ -144,7 +169,9 @@ export const Header: React.FC<HeaderProps> = ({
               ? `Koneksi Google Apps Script terganggu: ${syncState.errorMessage || ''}`
               : 'Klik untuk menghubungkan Google Apps Script (Spreadsheet Backend)'
           }
-          className={`text-xs px-2.5 py-1.5 rounded-lg border font-medium flex items-center gap-1.5 transition-all cursor-pointer ${
+          className={`text-xs px-2.5 py-1.5 rounded-lg border font-medium flex items-center gap-1.5 transition-all ${
+            isUserAdmin ? 'cursor-pointer' : 'cursor-default'
+          } ${
             syncState.status === 'synced'
               ? 'bg-emerald-50 border-emerald-300 text-emerald-800 hover:bg-emerald-100'
               : syncState.status === 'syncing'
@@ -183,8 +210,8 @@ export const Header: React.FC<HeaderProps> = ({
           <span className="hidden sm:inline">Transaksi Baru</span>
         </button>
 
-        {/* Export Excel / CSV */}
-        {currentRole === 'Admin' && (
+        {/* Export Excel / CSV (Admin Only) */}
+        {isUserAdmin && (
           <button
             onClick={onExportCSV}
             title="Download file spreadsheet Excel (.CSV)"
@@ -195,11 +222,8 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
-        {/* Live Date Badge */}
-        <div className="text-xs bg-slate-100 text-slate-700 px-2.5 py-1.5 rounded-lg border border-slate-200 font-mono hidden lg:flex items-center gap-1.5">
-          <Calendar className="w-3.5 h-3.5 text-slate-500" />
-          <span>{todayStr}</span>
-        </div>
+        {/* Live Real-time Digital Clock */}
+        <DigitalClock variant="header" className="hidden md:flex" />
 
         {/* Logout Button */}
         {onLogout && (
@@ -216,4 +240,5 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+
 

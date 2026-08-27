@@ -33,17 +33,82 @@ export interface Product {
   id: string;
   name: string;
   price: number;
+  buyPrice?: number;
   stock: number;
+  minStock?: number;
   category?: string;
   barcode?: string;
+  unit?: string;
+  lastRestockDate?: string;
 }
 
 export interface CartItem {
   id: string;
   name: string;
   price: number;
+  buyPrice?: number;
   qty: number;
   maxStock: number;
+  category?: string;
+  unit?: string;
+}
+
+export interface PosSaleItem {
+  productId: string;
+  productName: string;
+  category?: string;
+  price: number;
+  buyPrice: number;
+  qty: number;
+  unit?: string;
+  subtotal: number;
+  totalCost: number;
+  profit: number;
+}
+
+export interface PosSale {
+  id: string;
+  invoiceNumber: string;
+  time: string;
+  cashierName: string;
+  cashierRole?: UserRole;
+  items: PosSaleItem[];
+  totalQty: number;
+  totalRevenue: number;
+  totalCost: number;
+  grossProfit: number;
+  paymentMethod: string;
+  accountId: string;
+  customerName?: string;
+  customerPhone?: string;
+  notes?: string;
+  relatedTrxId?: string;
+  status?: 'SUCCESS' | 'VOID';
+}
+
+export type StockLogType =
+  | 'RESTOCK'
+  | 'PENYESUAIAN_KURANG'
+  | 'KOREKSI_MANUAL'
+  | 'PENJUALAN_POS'
+  | 'RESTOCK_MASUK'
+  | 'KOREKSI_RUSAK'
+  | 'KOREKSI_HILANG'
+  | 'KOREKSI_KADALUARSA'
+  | 'PENYESUAIAN_KOREKSI';
+
+export interface StockAdjustmentLog {
+  id: string;
+  time: string;
+  productId: string;
+  productName: string;
+  type: StockLogType;
+  qtyChange: number;
+  stockBefore: number;
+  stockAfter: number;
+  costPerUnit?: number;
+  reason?: string;
+  operatorName: string;
 }
 
 export interface AgentProfile {
@@ -110,6 +175,8 @@ export interface AppUser {
 export type ActiveTab =
   | 'transaksi'
   | 'laporan-detail'
+  | 'laporan-penjualan-fisik'
+  | 'stok-barang'
   | 'dashboard'
   | 'arus-kas'
   | 'akun-kas'

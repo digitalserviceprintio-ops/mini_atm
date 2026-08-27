@@ -70,7 +70,7 @@ export const HakAksesView: React.FC<HakAksesViewProps> = ({
   };
 
   const handleShareWA = (user: AppUser) => {
-    const msg = `Halo ${user.name},\nBerikut data login sistem Mini ATM / Agen BRILink Anda:\n\n👤 Username: ${user.username}\n🔑 Password: ${user.password}\n🎭 Role: ${user.role}\n\nSilakan login ke aplikasi. Terima kasih.`;
+    const msg = `Halo ${user.name},\nBerikut data login sistem Mini ATM / Agen Link Bersama Anda:\n\n👤 Username: ${user.username}\n🔑 Password: ${user.password}\n🎭 Role: ${user.role}\n\nSilakan login ke aplikasi. Terima kasih.`;
     const cleanPhone = (user.phone || '').replace(/[^0-9]/g, '');
     const waUrl = cleanPhone
       ? `https://wa.me/${cleanPhone.startsWith('0') ? '62' + cleanPhone.substring(1) : cleanPhone}?text=${encodeURIComponent(msg)}`

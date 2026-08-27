@@ -15,8 +15,14 @@ import {
   LogOut,
   FileSpreadsheet,
   Users,
+  Database,
+  Lock,
+  UserCheck,
+  RotateCcw,
+  Package,
+  TrendingUp,
 } from 'lucide-react';
-import { ActiveTab, AgentProfile } from '../types';
+import { ActiveTab, AgentProfile, UserRole } from '../types';
 import { AuthUser } from './views/LoginView';
 
 interface SidebarProps {
@@ -28,6 +34,7 @@ interface SidebarProps {
   trxCount: number;
   userCount?: number;
   currentUser?: AuthUser | null;
+  currentRole?: UserRole;
   onLogout?: () => void;
 }
 
@@ -40,8 +47,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   trxCount,
   userCount = 0,
   currentUser,
+  currentRole = 'Admin',
   onLogout,
 }) => {
+  const effectiveRole: UserRole = currentUser?.role || currentRole;
+  const isAdmin = effectiveRole === 'Admin';
+
   const handleSelectTab = (tab: ActiveTab) => {
     setActiveTab(tab);
     if (window.innerWidth < 1024) {
@@ -87,25 +98,60 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          {/* Navigation Links */}
-          <nav className="space-y-1 text-xs">
-            <button
-              onClick={() => handleSelectTab('dashboard')}
-              id="nav-dashboard"
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                  : 'text-blue-100 hover:bg-blue-700/60'
+          {/* User Role Badge Banner */}
+          <div
+            className={`p-2.5 rounded-xl border flex items-center justify-between text-xs ${
+              isAdmin
+                ? 'bg-blue-900/70 border-blue-700/60 text-blue-100'
+                : 'bg-amber-950/70 border-amber-800/60 text-amber-200'
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              {isAdmin ? (
+                <ShieldCheck className="w-4 h-4 text-blue-300 shrink-0" />
+              ) : (
+                <UserCheck className="w-4 h-4 text-amber-400 shrink-0" />
+              )}
+              <div>
+                <span className="text-[10px] uppercase tracking-wider block font-bold text-white/70">
+                  Peran Akun
+                </span>
+                <span className="font-extrabold text-xs">
+                  {isAdmin ? 'ADMINISTRATOR (Owner)' : 'KASIR OPERATOR'}
+                </span>
+              </div>
+            </div>
+            <span
+              className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                isAdmin ? 'bg-blue-600 text-white' : 'bg-amber-600 text-white'
               }`}
             >
-              <LayoutDashboard className="w-4 h-4 text-blue-300" />
-              <span className="flex-1">Dashboard Insights</span>
-            </button>
+              {isAdmin ? 'Full' : 'Shift'}
+            </span>
+          </div>
 
-            {/* Submenu Transaksi Agen */}
+          {/* Navigation Links */}
+          <nav className="space-y-1 text-xs">
+            {/* ADMIN ONLY: Dashboard Insights */}
+            {isAdmin && (
+              <button
+                onClick={() => handleSelectTab('dashboard')}
+                id="nav-dashboard"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'dashboard'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <LayoutDashboard className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Dashboard Insights</span>
+              </button>
+            )}
+
+            {/* Submenu Transaksi & Kasir */}
             <div className="space-y-1 pt-2">
               <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300 flex items-center justify-between">
-                <span>TRANSAKSI AGEN</span>
+                <span>{isAdmin ? 'TRANSAKSI & POS' : 'MENU KASIR'}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-blue-400" />
               </div>
 
@@ -119,9 +165,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <ListOrdered className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Daftar Transaksi</span>
+                <span className="flex-1">Daftar Transaksi Agen</span>
                 <span className="bg-blue-900/90 text-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
                   {trxCount}
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('kasir-fisik')}
+                id="nav-kasir-fisik"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'kasir-fisik'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <ShoppingCart className="w-4 h-4 text-blue-300" />
+                <span className="flex-1">Kasir POS (Jual Barang)</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('stok-barang')}
+                id="nav-stok-barang"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'stok-barang'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <Package className="w-4 h-4 text-amber-300" />
+                <span className="flex-1">Stok Barang Fisik</span>
+                <span className="bg-amber-500/20 text-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-500/30">
+                  Inventori
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('laporan-penjualan-fisik')}
+                id="nav-laporan-penjualan-fisik"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'laporan-penjualan-fisik'
+                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <TrendingUp className="w-4 h-4 text-emerald-300" />
+                <span className="flex-1">Laporan Penjualan & Laba</span>
+                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
+                  POS
                 </span>
               </button>
 
@@ -135,84 +226,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <FileBarChart className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Laporan Detail & Grafik</span>
-              </button>
-
-              <button
-                onClick={() => handleSelectTab('arus-kas')}
-                id="nav-arus-kas"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                  activeTab === 'arus-kas'
-                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                    : 'text-blue-100 hover:bg-blue-700/60'
-                }`}
-              >
-                <ArrowLeftRight className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Arus Kas & Mutasi</span>
-              </button>
-
-              <button
-                onClick={() => handleSelectTab('akun-kas')}
-                id="nav-akun-kas"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                  activeTab === 'akun-kas'
-                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                    : 'text-blue-100 hover:bg-blue-700/60'
-                }`}
-              >
-                <Wallet className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Akun Kas / Rekening</span>
-              </button>
-            </div>
-
-            {/* Submenu Operasional */}
-            <div className="space-y-1 pt-3">
-              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300">
-                <span>OPERASIONAL LAIN</span>
-              </div>
-
-              <button
-                onClick={() => handleSelectTab('kasir-fisik')}
-                id="nav-kasir-fisik"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                  activeTab === 'kasir-fisik'
-                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                    : 'text-blue-100 hover:bg-blue-700/60'
-                }`}
-              >
-                <ShoppingCart className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Kasir Penjualan Fisik</span>
-              </button>
-
-              <button
-                onClick={() => handleSelectTab('hak-akses')}
-                id="nav-hak-akses"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                  activeTab === 'hak-akses'
-                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                    : 'text-blue-100 hover:bg-blue-700/60'
-                }`}
-              >
-                <Users className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Akun Admin & Kasir</span>
-                {userCount > 0 && (
-                  <span className="bg-blue-900/90 text-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                    {userCount}
-                  </span>
-                )}
-              </button>
-
-              <button
-                onClick={() => handleSelectTab('profil-agen')}
-                id="nav-profil-agen"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                  activeTab === 'profil-agen'
-                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                    : 'text-blue-100 hover:bg-blue-700/60'
-                }`}
-              >
-                <Store className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Setting Profil Agen</span>
+                <span className="flex-1">
+                  {isAdmin ? 'Laporan Detail & Grafik' : 'Laporan Transaksi Kasir'}
+                </span>
               </button>
 
               <button
@@ -230,23 +246,127 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   Cepat
                 </span>
               </button>
-
-              <button
-                onClick={() => handleSelectTab('database-spreadsheet')}
-                id="nav-database-spreadsheet"
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                  activeTab === 'database-spreadsheet'
-                    ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                    : 'text-blue-100 hover:bg-blue-700/60'
-                }`}
-              >
-                <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
-                <span className="flex-1">Database Spreadsheet</span>
-                <span className="bg-blue-900/60 text-blue-200 text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-400/30">
-                  GAS
-                </span>
-              </button>
             </div>
+
+            {/* ADMIN ONLY: Keuangan & Master Mutasi */}
+            {isAdmin && (
+              <div className="space-y-1 pt-3">
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300 flex items-center justify-between">
+                  <span>KEUANGAN & ARUS KAS</span>
+                  <span className="text-[9px] bg-blue-800 text-blue-200 px-1 py-0.2 rounded">Admin</span>
+                </div>
+
+                <button
+                  onClick={() => handleSelectTab('arus-kas')}
+                  id="nav-arus-kas"
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                    activeTab === 'arus-kas'
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'text-blue-100 hover:bg-blue-700/60'
+                  }`}
+                >
+                  <ArrowLeftRight className="w-4 h-4 text-blue-300" />
+                  <span className="flex-1">Arus Kas & Mutasi</span>
+                </button>
+
+                <button
+                  onClick={() => handleSelectTab('akun-kas')}
+                  id="nav-akun-kas"
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                    activeTab === 'akun-kas'
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'text-blue-100 hover:bg-blue-700/60'
+                  }`}
+                >
+                  <Wallet className="w-4 h-4 text-blue-300" />
+                  <span className="flex-1">Akun Kas / Rekening</span>
+                </button>
+              </div>
+            )}
+
+            {/* ADMIN ONLY: Pengaturan & Master Data */}
+            {isAdmin && (
+              <div className="space-y-1 pt-3">
+                <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300 flex items-center justify-between">
+                  <span>PENGATURAN OWNER (ADMIN)</span>
+                </div>
+
+                <button
+                  onClick={() => handleSelectTab('hak-akses')}
+                  id="nav-hak-akses"
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                    activeTab === 'hak-akses'
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'text-blue-100 hover:bg-blue-700/60'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-blue-300" />
+                  <span className="flex-1">Akun Admin & Kasir</span>
+                  {userCount > 0 && (
+                    <span className="bg-blue-900/90 text-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                      {userCount}
+                    </span>
+                  )}
+                </button>
+
+                <button
+                  onClick={() => handleSelectTab('profil-agen')}
+                  id="nav-profil-agen"
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                    activeTab === 'profil-agen'
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'text-blue-100 hover:bg-blue-700/60'
+                  }`}
+                >
+                  <Store className="w-4 h-4 text-blue-300" />
+                  <span className="flex-1">Setting Profil Agen</span>
+                </button>
+
+                <button
+                  onClick={() => handleSelectTab('database-spreadsheet')}
+                  id="nav-database-spreadsheet"
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                    activeTab === 'database-spreadsheet'
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'text-blue-100 hover:bg-blue-700/60'
+                  }`}
+                >
+                  <FileSpreadsheet className="w-4 h-4 text-emerald-400" />
+                  <span className="flex-1">Database Spreadsheet</span>
+                  <span className="bg-blue-900/60 text-blue-200 text-[9px] font-bold px-1.5 py-0.5 rounded border border-blue-400/30">
+                    GAS
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => handleSelectTab('backup-reset')}
+                  id="nav-backup-reset"
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                    activeTab === 'backup-reset'
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'text-blue-100 hover:bg-blue-700/60'
+                  }`}
+                >
+                  <Database className="w-4 h-4 text-amber-300" />
+                  <span className="flex-1">Backup & Reset Data</span>
+                </button>
+              </div>
+            )}
+
+            {/* FOR KASIR: Information notice regarding Admin features */}
+            {!isAdmin && (
+              <div className="pt-3">
+                <div className="bg-blue-950/60 border border-blue-800/40 rounded-xl p-3 space-y-1.5 text-[11px] text-blue-200/80">
+                  <div className="flex items-center gap-1.5 font-semibold text-blue-200">
+                    <Lock className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Fitur Terkunci</span>
+                  </div>
+                  <p className="text-[10px] leading-relaxed text-slate-300">
+                    Menu Dashboard analitik, Rekening, Arus Kas, Manajemen Akun, dan Database dikelola oleh <strong>Admin/Owner</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
           </nav>
         </div>
 
@@ -287,4 +407,5 @@ export const Sidebar: React.FC<SidebarProps> = ({
     </>
   );
 };
+
 

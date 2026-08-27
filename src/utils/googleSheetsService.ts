@@ -3,8 +3,10 @@ import {
   AgentProfile,
   AppUser,
   CashMutation,
+  PosSale,
   PrinterSettings,
   Product,
+  StockAdjustmentLog,
   Transaction,
 } from '../types';
 
@@ -13,6 +15,8 @@ export interface AppSyncData {
   accounts: Account[];
   mutations: CashMutation[];
   products: Product[];
+  posSales?: PosSale[];
+  stockLogs?: StockAdjustmentLog[];
   users?: AppUser[];
   profile: AgentProfile | null;
   printerSettings: PrinterSettings | null;
@@ -143,156 +147,166 @@ async function sendToGas(
     });
 
     if (!response.ok) {
-      throw new Error(`HTTP Error ${response.status}: ${response.statusText}`);
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
     const json = await response.json();
-    const nowStr = new Date().toLocaleTimeString('id-ID', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-    });
 
-    if (json.status === 'success' || !json.status) {
+    if (json.status === 'success') {
+      const nowStr = new Date().toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
       updateSyncState({
         status: 'synced',
         lastSyncedAt: nowStr,
         errorMessage: null,
         pendingCount: Math.max(0, currentSyncState.pendingCount - 1),
-        spreadsheetName: json.spreadsheetName || currentSyncState.spreadsheetName,
-        spreadsheetUrl: json.spreadsheetUrl || currentSyncState.spreadsheetUrl,
       });
-      return { success: true, data: json.data || json, raw: json };
+      return { success: true, data: json.data, raw: json };
     } else {
-      throw new Error(json.message || 'Respons error dari Google Apps Script');
+      throw new Error(json.message || 'Respons error dari Google Apps Script.');
     }
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
-    console.warn(`[GAS Sync Error] (${action}):`, errMsg);
+    console.error('GAS Sync Error:', errMsg);
 
     updateSyncState({
       status: 'error',
       errorMessage: errMsg,
       pendingCount: Math.max(0, currentSyncState.pendingCount - 1),
     });
-    return { success: false, message: errMsg };
+
+    return {
+      success: false,
+      message: errMsg.includes('Failed to fetch')
+        ? 'Gagal terhubung ke Google Apps Script. Pastikan Web App di-deploy dengan opsi "Who has access: Anyone".'
+        : errMsg,
+    };
   }
 }
 
 /**
- * Ping / Test Google Apps Script Endpoint
+ * Ping test Google Apps Script Web App connection
  */
-export async function testGasConnection(targetUrl?: string): Promise<{
-  success: boolean;
-  message: string;
-  spreadsheetName?: string;
-  spreadsheetUrl?: string;
-}> {
-  const url = (targetUrl || getGasUrl()).trim();
-  if (!url) {
-    return { success: false, message: 'Silakan masukkan URL Google Apps Script Web App terlebih dahulu.' };
-  }
-
+export async function testGasConnection(
+  url: string
+): Promise<{ success: boolean; message: string; sheetName?: string; sheetUrl?: string }> {
   try {
-    const pingRes = await sendToGas('ping', {}, url);
-    if (pingRes.success && pingRes.raw) {
-      const rawObj = pingRes.raw as { spreadsheetName?: string; spreadsheetUrl?: string };
-      if (rawObj.spreadsheetName) {
-        localStorage.setItem(STORAGE_GAS_SHEET_NAME_KEY, rawObj.spreadsheetName);
-      }
-      if (rawObj.spreadsheetUrl) {
-        localStorage.setItem(STORAGE_GAS_SHEET_URL_KEY, rawObj.spreadsheetUrl);
-      }
+    const cleanUrl = url.trim();
+    if (!cleanUrl.startsWith('https://script.google.com/')) {
       return {
-        success: true,
-        message: 'Koneksi ke Google Sheets Backend Berhasil!',
-        spreadsheetName: rawObj.spreadsheetName,
-        spreadsheetUrl: rawObj.spreadsheetUrl,
+        success: false,
+        message: 'URL harus berawal dari https://script.google.com/macros/s/.../exec',
       };
     }
-    return { success: false, message: pingRes.message || 'Gagal tersambung ke spreadsheet.' };
-  } catch (err: unknown) {
-    const errMsg = err instanceof Error ? err.message : String(err);
-    return { success: false, message: `Koneksi gagal: ${errMsg}` };
-  }
-}
 
-/**
- * Fetch Initial Application Data from Google Sheets
- * Digunakan saat inisialisasi menu dan aplikasi pertama kali dibuka
- */
-export async function fetchInitialDataFromSheets(customUrl?: string): Promise<{
-  success: boolean;
-  data?: AppSyncData;
-  message?: string;
-  spreadsheetName?: string;
-  spreadsheetUrl?: string;
-}> {
-  const url = (customUrl || getGasUrl()).trim();
-  if (!url) {
-    return { success: false, message: 'URL Apps Script belum diisi.' };
-  }
+    // Try GET ping first
+    const getRes = await fetch(`${cleanUrl}?action=ping`, {
+      method: 'GET',
+    });
 
-  try {
-    // Attempt GET first (fastest for initialization)
-    let json: {
-      status?: string;
-      data?: AppSyncData;
-      spreadsheetName?: string;
-      spreadsheetUrl?: string;
-      message?: string;
-    } | null = null;
-
-    try {
-      const getRes = await fetch(`${url}${url.includes('?') ? '&' : '?'}action=init`, {
-        method: 'GET',
-      });
-      if (getRes.ok) {
-        json = await getRes.json();
-      }
-    } catch {
-      // Fallback to POST
-      const postRes = await sendToGas('init', {}, url);
-      if (postRes.success && postRes.raw) {
-        json = postRes.raw as typeof json;
-      }
+    if (!getRes.ok) {
+      throw new Error(`HTTP ${getRes.status}: ${getRes.statusText}`);
     }
 
-    if (json && (json.status === 'success' || json.data)) {
-      const appData = json.data as AppSyncData;
-      const nowStr = new Date().toLocaleTimeString('id-ID', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      });
-
-      if (json.spreadsheetName) {
-        localStorage.setItem(STORAGE_GAS_SHEET_NAME_KEY, json.spreadsheetName);
-      }
-      if (json.spreadsheetUrl) {
-        localStorage.setItem(STORAGE_GAS_SHEET_URL_KEY, json.spreadsheetUrl);
-      }
-
-      updateSyncState({
-        status: 'synced',
-        lastSyncedAt: nowStr,
-        spreadsheetName: json.spreadsheetName || currentSyncState.spreadsheetName,
-        spreadsheetUrl: json.spreadsheetUrl || currentSyncState.spreadsheetUrl,
-        errorMessage: null,
-      });
-
+    const data = await getRes.json();
+    if (data.status === 'success') {
       return {
         success: true,
-        data: appData,
-        spreadsheetName: json.spreadsheetName,
-        spreadsheetUrl: json.spreadsheetUrl,
+        message: 'Berhasil terhubung ke Google Apps Script!',
+        sheetName: data.spreadsheetName,
+        sheetUrl: data.spreadsheetUrl,
+      };
+    }
+
+    // Fallback try POST ping
+    const postRes = await sendToGas('ping', {}, cleanUrl);
+    if (postRes.success) {
+      return {
+        success: true,
+        message: 'Berhasil terhubung ke Google Apps Script (via POST)!',
       };
     }
 
     return {
       success: false,
-      message: json?.message || 'Data tidak ditemukan di Spreadsheet.',
+      message: data.message || 'Tidak menerima respon sukses dari script.',
     };
+  } catch (err: unknown) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    return {
+      success: false,
+      message: errMsg.includes('Failed to fetch')
+        ? 'Koneksi ditolak/CORS. Pastikan script sudah di-Deploy ulang sebagai Web App dengan izin "Anyone".'
+        : `Gagal menguji koneksi: ${errMsg}`,
+    };
+  }
+}
+
+/**
+ * Fetch all initial application data from Google Sheets
+ */
+export async function fetchInitialDataFromSheets(): Promise<{
+  success: boolean;
+  data?: AppSyncData;
+  message?: string;
+}> {
+  const url = getGasUrl();
+  if (!url) {
+    return { success: false, message: 'URL Google Apps Script belum dikonfigurasi.' };
+  }
+
+  updateSyncState({ status: 'syncing', errorMessage: null });
+
+  try {
+    let resultData: AppSyncData | undefined;
+
+    // Strategy 1: Fast GET request
+    try {
+      const getResponse = await fetch(`${url}?action=getData`, { method: 'GET' });
+      if (getResponse.ok) {
+        const json = await getResponse.json();
+        if (json.status === 'success' && json.data) {
+          resultData = json.data as AppSyncData;
+          if (json.spreadsheetName) {
+            localStorage.setItem(STORAGE_GAS_SHEET_NAME_KEY, json.spreadsheetName);
+            currentSyncState.spreadsheetName = json.spreadsheetName;
+          }
+          if (json.spreadsheetUrl) {
+            localStorage.setItem(STORAGE_GAS_SHEET_URL_KEY, json.spreadsheetUrl);
+            currentSyncState.spreadsheetUrl = json.spreadsheetUrl;
+          }
+        }
+      }
+    } catch {
+      // Continue to POST fallback
+    }
+
+    // Strategy 2: POST fallback if GET was blocked
+    if (!resultData) {
+      const postRes = await sendToGas('getData');
+      if (postRes.success && postRes.data) {
+        resultData = postRes.data as AppSyncData;
+      }
+    }
+
+    if (resultData) {
+      const nowStr = new Date().toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+      });
+      updateSyncState({
+        status: 'synced',
+        lastSyncedAt: nowStr,
+        errorMessage: null,
+      });
+      return { success: true, data: resultData };
+    } else {
+      throw new Error('Tidak ada data yang diterima dari Google Sheets.');
+    }
   } catch (err: unknown) {
     const errMsg = err instanceof Error ? err.message : String(err);
     updateSyncState({
@@ -371,12 +385,28 @@ export async function syncProductToSheets(product: Product): Promise<boolean> {
   return res.success;
 }
 
-// 7. Checkout Kasir POS Fisik (Sinkron Produk, Transaksi, Akun Kas, dan Mutasi Kas)
+// 7. Hapus Produk
+export async function syncDeleteProductToSheets(productId: string): Promise<boolean> {
+  if (!getGasUrl()) return false;
+  const res = await sendToGas('deleteProduct', { productId });
+  return res.success;
+}
+
+// 8. Simpan Log Penyesuaian / Restock Stok
+export async function syncStockLogToSheets(stockLog: StockAdjustmentLog): Promise<boolean> {
+  if (!getGasUrl()) return false;
+  const res = await sendToGas('saveStockLog', { stockLog });
+  return res.success;
+}
+
+// 9. Checkout Kasir POS Fisik (Sinkron Produk, Penjualan POS, Log Stok, Transaksi, Akun Kas, dan Mutasi Kas)
 export async function syncCheckoutPOSToSheets(
   products: Product[],
-  transaction: Transaction,
-  accounts: Account[],
-  mutation?: CashMutation
+  transaction?: Transaction,
+  accounts?: Account[],
+  mutation?: CashMutation,
+  posSale?: PosSale,
+  stockLogs?: StockAdjustmentLog[]
 ): Promise<boolean> {
   if (!getGasUrl()) return false;
   const res = await sendToGas('checkoutPOS', {
@@ -384,18 +414,33 @@ export async function syncCheckoutPOSToSheets(
     transaction,
     accounts,
     mutation,
+    posSale,
+    stockLogs,
   });
   return res.success;
 }
 
-// 8. Simpan Profil Agen
+// 10. Simpan / Void Penjualan POS
+export async function syncPosSaleToSheets(posSale: PosSale): Promise<boolean> {
+  if (!getGasUrl()) return false;
+  const res = await sendToGas('savePosSale', { posSale });
+  return res.success;
+}
+
+export async function syncVoidPosSaleToSheets(saleId: string): Promise<boolean> {
+  if (!getGasUrl()) return false;
+  const res = await sendToGas('voidPosSale', { saleId });
+  return res.success;
+}
+
+// 11. Simpan Profil Agen
 export async function syncProfileToSheets(profile: AgentProfile): Promise<boolean> {
   if (!getGasUrl()) return false;
   const res = await sendToGas('saveProfile', { profile });
   return res.success;
 }
 
-// 9. Simpan Setting Printer
+// 12. Simpan Setting Printer
 export async function syncPrinterSettingsToSheets(
   printerSettings: PrinterSettings
 ): Promise<boolean> {
@@ -404,26 +449,28 @@ export async function syncPrinterSettingsToSheets(
   return res.success;
 }
 
-// 10. Simpan / Update Akun Pengguna (Admin & Kasir)
+// 13. Simpan / Update Akun Pengguna (Admin & Kasir)
 export async function syncUserToSheets(user: AppUser): Promise<boolean> {
   if (!getGasUrl()) return false;
   const res = await sendToGas('saveUser', { user });
   return res.success;
 }
 
-// 11. Hapus Akun Pengguna
+// 14. Hapus Akun Pengguna
 export async function syncDeleteUserToSheets(userId: string): Promise<boolean> {
   if (!getGasUrl()) return false;
   const res = await sendToGas('deleteUser', { userId });
   return res.success;
 }
 
-// 12. Batch Synchronize All Application State to Spreadsheet
+// 15. Batch Synchronize All Application State to Spreadsheet
 export async function syncAllToSheets(payload: {
   transactions: Transaction[];
   accounts: Account[];
   mutations: CashMutation[];
   products: Product[];
+  posSales?: PosSale[];
+  stockLogs?: StockAdjustmentLog[];
   users?: AppUser[];
   profile: AgentProfile;
   printerSettings: PrinterSettings;

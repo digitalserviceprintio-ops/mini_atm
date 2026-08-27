@@ -14,8 +14,8 @@ import { Account, Transaction, TransactionType, UserRole } from '../../types';
 import { formatRp } from '../../utils/formatters';
 
 interface TransaksiViewProps {
-  transactions: Transaction[];
-  accounts: Account[];
+  transactions?: Transaction[];
+  accounts?: Account[];
   currentRole: UserRole;
   onOpenNewTrx: () => void;
   onEditTrx: (trx: Transaction) => void;
@@ -24,8 +24,8 @@ interface TransaksiViewProps {
 }
 
 export const TransaksiView: React.FC<TransaksiViewProps> = ({
-  transactions,
-  accounts,
+  transactions = [],
+  accounts = [],
   currentRole,
   onOpenNewTrx,
   onEditTrx,
@@ -50,16 +50,16 @@ export const TransaksiView: React.FC<TransaksiViewProps> = ({
     return categories.map((cat) => {
       const filtered =
         cat === 'SEMUA'
-          ? transactions
-          : transactions.filter((t) => t.type === cat);
+          ? (transactions || [])
+          : (transactions || []).filter((t) => t && t.type === cat);
 
       const totalNom = filtered.reduce(
-        (sum, t) => sum + (t.status !== 'VOID' ? t.nominal : 0),
+        (sum, t) => sum + (t && t.status !== 'VOID' ? t.nominal || 0 : 0),
         0
       );
 
       const totalProfit = filtered.reduce(
-        (sum, t) => sum + (t.status !== 'VOID' ? t.feeCust - t.feeAdmin : 0),
+        (sum, t) => sum + (t && t.status !== 'VOID' ? (t.feeCust || 0) - (t.feeAdmin || 0) : 0),
         0
       );
 
@@ -74,16 +74,17 @@ export const TransaksiView: React.FC<TransaksiViewProps> = ({
 
   // Filtered transactions
   const filteredTransactions = useMemo(() => {
-    return transactions.filter((t) => {
+    const q = (searchQuery || '').toLowerCase().trim();
+    return (transactions || []).filter((t) => {
+      if (!t) return false;
       const matchCat =
         activeCategory === 'SEMUA' || t.type === activeCategory;
-      const q = searchQuery.toLowerCase().trim();
       const matchSearch =
         !q ||
-        t.cust.toLowerCase().includes(q) ||
-        t.target.toLowerCase().includes(q) ||
-        t.id.toLowerCase().includes(q) ||
-        String(t.nominal).includes(q) ||
+        (t.cust && t.cust.toLowerCase().includes(q)) ||
+        (t.target && t.target.toLowerCase().includes(q)) ||
+        (t.id && t.id.toLowerCase().includes(q)) ||
+        String(t.nominal || '').includes(q) ||
         (t.notes && t.notes.toLowerCase().includes(q)) ||
         (t.refNumber && t.refNumber.toLowerCase().includes(q));
 
@@ -92,14 +93,14 @@ export const TransaksiView: React.FC<TransaksiViewProps> = ({
   }, [transactions, activeCategory, searchQuery]);
 
   // Pagination
-  const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage) || 1;
+  const totalPages = Math.ceil((filteredTransactions || []).length / itemsPerPage) || 1;
   const paginatedTransactions = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
-    return filteredTransactions.slice(start, start + itemsPerPage);
+    return (filteredTransactions || []).slice(start, start + itemsPerPage);
   }, [filteredTransactions, currentPage]);
 
   const accountMap = useMemo(() => {
-    return new Map(accounts.map((a) => [a.id, a.name]));
+    return new Map((accounts || []).map((a) => [a.id, a.name]));
   }, [accounts]);
 
   return (
