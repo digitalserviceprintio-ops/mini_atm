@@ -304,4 +304,5 @@ export type ActiveTab =
   | 'profil-agen'
   | 'setting-printer'
   | 'database-spreadsheet'
-  | 'backup-reset';
+  | 'backup-reset'
+  | 'tentang-sistem';

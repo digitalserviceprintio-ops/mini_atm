@@ -22,6 +22,8 @@ import {
   Package,
   TrendingUp,
   Sparkles,
+  Info,
+  BookOpen,
 } from 'lucide-react';
 import { ActiveTab, AgentProfile, UserRole } from '../types';
 import { AuthUser } from './views/LoginView';
@@ -382,6 +384,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             )}
 
+            {/* FOR ALL USERS: Informasi, Panduan & Developer */}
+            <div className="space-y-1 pt-3">
+              <div className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-blue-300 flex items-center justify-between">
+                <span>INFORMASI & PANDUAN</span>
+              </div>
+
+              <button
+                onClick={() => handleSelectTab('tentang-sistem')}
+                id="nav-tentang-sistem"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'tentang-sistem'
+                    ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white font-bold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <Info className="w-4 h-4 text-sky-300" />
+                <span className="flex-1">Tentang & Panduan Sistem</span>
+                <span className="bg-sky-500/20 text-sky-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-sky-400/30">
+                  microdata2r
+                </span>
+              </button>
+            </div>
+
             {/* FOR KASIR: Information notice regarding Admin features */}
             {!isAdmin && (
               <div className="pt-3">
@@ -446,6 +471,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <ModalVersionInfo
         isOpen={isVersionModalOpen}
         onClose={() => setIsVersionModalOpen(false)}
+        onNavigateToAbout={() => {
+          setIsVersionModalOpen(false);
+          handleSelectTab('tentang-sistem');
+        }}
       />
     </>
   );

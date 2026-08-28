@@ -8,15 +8,22 @@ import {
   Layers,
   ArrowUpCircle,
   RefreshCw,
+  BookOpen,
+  Code2,
 } from 'lucide-react';
 import { useAppVersion, VersionChangeLog } from '../../utils/versionManager';
 
 interface ModalVersionInfoProps {
   isOpen: boolean;
   onClose: () => void;
+  onNavigateToAbout?: () => void;
 }
 
-export const ModalVersionInfo: React.FC<ModalVersionInfoProps> = ({ isOpen, onClose }) => {
+export const ModalVersionInfo: React.FC<ModalVersionInfoProps> = ({
+  isOpen,
+  onClose,
+  onNavigateToAbout,
+}) => {
   const { state, version, enterpriseVersion, buildDetails, recordChange, resetVersion } =
     useAppVersion();
 
@@ -190,6 +197,23 @@ export const ModalVersionInfo: React.FC<ModalVersionInfoProps> = ({ isOpen, onCl
               )}
             </div>
           </div>
+        </div>
+
+        {/* Developer Credit & Guide Link */}
+        <div className="px-5 py-2.5 bg-slate-100/70 border-t border-slate-200 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1.5 text-slate-600 font-medium">
+            <Code2 className="w-3.5 h-3.5 text-blue-600" />
+            <span>Developer: <strong className="text-slate-800">microdata2r</strong></span>
+          </div>
+          {onNavigateToAbout && (
+            <button
+              onClick={onNavigateToAbout}
+              className="text-blue-700 hover:text-blue-900 font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Buku Panduan Detail &rarr;</span>
+            </button>
+          )}
         </div>
 
         {/* Footer */}

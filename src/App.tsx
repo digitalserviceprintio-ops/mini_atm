@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ActiveTab,
   AgentProfile,
@@ -53,6 +53,7 @@ import { ProfilAgenView } from './components/views/ProfilAgenView';
 import { SettingPrinterView } from './components/views/SettingPrinterView';
 import { DatabaseSpreadsheetView } from './components/views/DatabaseSpreadsheetView';
 import { BackupResetView } from './components/views/BackupResetView';
+import { TentangSistemView } from './components/views/TentangSistemView';
 import { ModalTrx } from './components/modals/ModalTrx';
 import { ModalReceipt } from './components/modals/ModalReceipt';
 import { ModalConfirmVoid } from './components/modals/ModalConfirmVoid';
@@ -94,88 +95,55 @@ import {
   AppSyncData,
 } from './utils/googleSheetsService';
 import { recordVersionChange } from './utils/versionManager';
+import {
+  IsolatedUserData,
+  loadUserIsolatedData,
+  saveUserStorageItem,
+  createFreshUserData,
+} from './utils/userStorage';
 import { ShieldAlert, ArrowLeft, Lock } from 'lucide-react';
 
 export default function App() {
   // Authentication state
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
-    const savedUser = localStorage.getItem('miniatm_current_user');
-    return savedUser ? JSON.parse(savedUser) : null;
-  });
-
-  // Persistence state with LocalStorage
-  const [profile, setProfile] = useState<AgentProfile>(() => {
-    const saved = localStorage.getItem('miniatm_profile');
-    return saved ? JSON.parse(saved) : INITIAL_AGENT_PROFILE;
-  });
-
-  const [accounts, setAccounts] = useState<Account[]>(() => {
-    const saved = localStorage.getItem('miniatm_accounts');
-    return saved ? JSON.parse(saved) : INITIAL_ACCOUNTS;
-  });
-
-  const [transactions, setTransactions] = useState<Transaction[]>(() => {
-    const saved = localStorage.getItem('miniatm_transactions');
-    return saved ? JSON.parse(saved) : INITIAL_TRANSACTIONS;
-  });
-
-  const [products, setProducts] = useState<Product[]>(() => {
-    const saved = localStorage.getItem('miniatm_products');
-    return saved ? JSON.parse(saved) : INITIAL_PRODUCTS;
-  });
-
-  const [posSales, setPosSales] = useState<PosSale[]>(() => {
-    const saved = localStorage.getItem('miniatm_pos_sales');
-    return saved ? JSON.parse(saved) : INITIAL_POS_SALES;
-  });
-
-  const [stockLogs, setStockLogs] = useState<StockAdjustmentLog[]>(() => {
-    const saved = localStorage.getItem('miniatm_stock_logs');
-    return saved ? JSON.parse(saved) : INITIAL_STOCK_LOGS;
-  });
-
-  const [users, setUsers] = useState<AppUser[]>(() => {
-    const saved = localStorage.getItem('miniatm_users');
-    return saved ? JSON.parse(saved) : INITIAL_USERS;
-  });
-
-  const [members, setMembers] = useState<CustomerMember[]>(() => {
-    const saved = localStorage.getItem('miniatm_members');
-    return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
-  });
-
-  const [memberPoints, setMemberPoints] = useState<MemberPointHistory[]>(() => {
-    const saved = localStorage.getItem('miniatm_member_points');
-    return saved ? JSON.parse(saved) : INITIAL_MEMBER_POINTS;
-  });
-
-  const [memberRewards, setMemberRewards] = useState<MemberRewardItem[]>(() => {
-    const saved = localStorage.getItem('miniatm_member_rewards');
-    return saved ? JSON.parse(saved) : INITIAL_MEMBER_REWARDS;
-  });
-
-  const [voucherClaims, setVoucherClaims] = useState<MemberVoucherClaim[]>(() => {
-    const saved = localStorage.getItem('miniatm_member_vouchers');
-    return saved ? JSON.parse(saved) : INITIAL_MEMBER_VOUCHERS;
-  });
-
-  const [pointSettings, setPointSettings] = useState<PointExchangeSettings>(() => {
     try {
-      const saved = localStorage.getItem('miniatm_point_settings');
-      return saved ? { ...INITIAL_POINT_SETTINGS, ...JSON.parse(saved) } : INITIAL_POINT_SETTINGS;
+      const savedUser = localStorage.getItem('miniatm_current_user');
+      return savedUser ? JSON.parse(savedUser) : null;
     } catch {
-      return INITIAL_POINT_SETTINGS;
+      return null;
     }
   });
 
-  const [mutations, setMutations] = useState<CashMutation[]>(() => {
-    const saved = localStorage.getItem('miniatm_mutations');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // Load initial workspace data based on the authenticated user (or default admin)
+  const initialWorkspace = useMemo(() => {
+    return loadUserIsolatedData(
+      currentUser || { username: 'admin', name: 'Bpk. Andriawan Delva (Owner)', role: 'Admin' }
+    );
+  }, []);
 
-  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() => {
-    const saved = localStorage.getItem('miniatm_printer_settings');
-    return saved ? JSON.parse(saved) : INITIAL_PRINTER_SETTINGS;
+  // Isolated workspace persistence state with LocalStorage
+  const [profile, setProfile] = useState<AgentProfile>(() => initialWorkspace.profile);
+  const [accounts, setAccounts] = useState<Account[]>(() => initialWorkspace.accounts);
+  const [transactions, setTransactions] = useState<Transaction[]>(() => initialWorkspace.transactions);
+  const [products, setProducts] = useState<Product[]>(() => initialWorkspace.products);
+  const [posSales, setPosSales] = useState<PosSale[]>(() => initialWorkspace.posSales);
+  const [stockLogs, setStockLogs] = useState<StockAdjustmentLog[]>(() => initialWorkspace.stockLogs);
+  const [mutations, setMutations] = useState<CashMutation[]>(() => initialWorkspace.mutations);
+  const [members, setMembers] = useState<CustomerMember[]>(() => initialWorkspace.members);
+  const [memberPoints, setMemberPoints] = useState<MemberPointHistory[]>(() => initialWorkspace.memberPoints);
+  const [memberRewards, setMemberRewards] = useState<MemberRewardItem[]>(() => initialWorkspace.memberRewards);
+  const [voucherClaims, setVoucherClaims] = useState<MemberVoucherClaim[]>(() => initialWorkspace.voucherClaims);
+  const [pointSettings, setPointSettings] = useState<PointExchangeSettings>(() => initialWorkspace.pointSettings);
+  const [printerSettings, setPrinterSettings] = useState<PrinterSettings>(() => initialWorkspace.printerSettings);
+
+  // Global user accounts across the system portal
+  const [users, setUsers] = useState<AppUser[]>(() => {
+    try {
+      const saved = localStorage.getItem('miniatm_users');
+      return saved ? JSON.parse(saved) : INITIAL_USERS;
+    } catch {
+      return INITIAL_USERS;
+    }
   });
 
   const [currentRole, setCurrentRole] = useState<UserRole>(() => {
@@ -376,7 +344,27 @@ export default function App() {
     }
   }, []);
 
-  // Sync authentication & data to LocalStorage
+  // Active username scope for multi-user isolated storage
+  const activeUsername = (currentUser?.username || 'admin').trim().toLowerCase();
+
+  // Helper to load and apply complete isolated workspace state for a user
+  const applyUserData = (data: IsolatedUserData) => {
+    setProfile(data.profile);
+    setAccounts(data.accounts);
+    setTransactions(data.transactions);
+    setProducts(data.products);
+    setPosSales(data.posSales);
+    setStockLogs(data.stockLogs);
+    setMutations(data.mutations);
+    setMembers(data.members);
+    setMemberPoints(data.memberPoints);
+    setMemberRewards(data.memberRewards);
+    setVoucherClaims(data.voucherClaims);
+    setPointSettings(data.pointSettings);
+    setPrinterSettings(data.printerSettings);
+  };
+
+  // Sync authentication & data to LocalStorage (Isolated per-user)
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('miniatm_current_user', JSON.stringify(currentUser));
@@ -386,60 +374,99 @@ export default function App() {
   }, [currentUser]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_profile', JSON.stringify(profile));
-  }, [profile]);
+    saveUserStorageItem(activeUsername, 'profile', profile);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_profile', JSON.stringify(profile));
+    }
+  }, [profile, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_accounts', JSON.stringify(accounts));
-  }, [accounts]);
+    saveUserStorageItem(activeUsername, 'accounts', accounts);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_accounts', JSON.stringify(accounts));
+    }
+  }, [accounts, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_transactions', JSON.stringify(transactions));
-  }, [transactions]);
+    saveUserStorageItem(activeUsername, 'transactions', transactions);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_transactions', JSON.stringify(transactions));
+    }
+  }, [transactions, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_products', JSON.stringify(products));
-  }, [products]);
+    saveUserStorageItem(activeUsername, 'products', products);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_products', JSON.stringify(products));
+    }
+  }, [products, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_pos_sales', JSON.stringify(posSales));
-  }, [posSales]);
+    saveUserStorageItem(activeUsername, 'pos_sales', posSales);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_pos_sales', JSON.stringify(posSales));
+    }
+  }, [posSales, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_stock_logs', JSON.stringify(stockLogs));
-  }, [stockLogs]);
+    saveUserStorageItem(activeUsername, 'stock_logs', stockLogs);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_stock_logs', JSON.stringify(stockLogs));
+    }
+  }, [stockLogs, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_mutations', JSON.stringify(mutations));
-  }, [mutations]);
+    saveUserStorageItem(activeUsername, 'mutations', mutations);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_mutations', JSON.stringify(mutations));
+    }
+  }, [mutations, activeUsername]);
 
   useEffect(() => {
     localStorage.setItem('miniatm_users', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_members', JSON.stringify(members));
-  }, [members]);
+    saveUserStorageItem(activeUsername, 'members', members);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_members', JSON.stringify(members));
+    }
+  }, [members, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_member_points', JSON.stringify(memberPoints));
-  }, [memberPoints]);
+    saveUserStorageItem(activeUsername, 'member_points', memberPoints);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_member_points', JSON.stringify(memberPoints));
+    }
+  }, [memberPoints, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_member_rewards', JSON.stringify(memberRewards));
-  }, [memberRewards]);
+    saveUserStorageItem(activeUsername, 'member_rewards', memberRewards);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_member_rewards', JSON.stringify(memberRewards));
+    }
+  }, [memberRewards, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_member_vouchers', JSON.stringify(voucherClaims));
-  }, [voucherClaims]);
+    saveUserStorageItem(activeUsername, 'member_vouchers', voucherClaims);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_member_vouchers', JSON.stringify(voucherClaims));
+    }
+  }, [voucherClaims, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_point_settings', JSON.stringify(pointSettings));
-  }, [pointSettings]);
+    saveUserStorageItem(activeUsername, 'point_settings', pointSettings);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_point_settings', JSON.stringify(pointSettings));
+    }
+  }, [pointSettings, activeUsername]);
 
   useEffect(() => {
-    localStorage.setItem('miniatm_printer_settings', JSON.stringify(printerSettings));
-  }, [printerSettings]);
+    saveUserStorageItem(activeUsername, 'printer_settings', printerSettings);
+    if (activeUsername === 'admin') {
+      localStorage.setItem('miniatm_printer_settings', JSON.stringify(printerSettings));
+    }
+  }, [printerSettings, activeUsername]);
 
   useEffect(() => {
     localStorage.setItem('miniatm_role', currentRole);
@@ -448,6 +475,8 @@ export default function App() {
   const handleLoginSuccess = (user: AuthUser) => {
     setCurrentUser(user);
     setCurrentRole(user.role);
+    const workspace = loadUserIsolatedData(user);
+    applyUserData(workspace);
     if (user.role === 'Kasir') {
       setActiveTab('transaksi');
     } else {
@@ -507,9 +536,10 @@ export default function App() {
         }
       }
     } else {
+      const cleanUsername = (userData.username || '').trim().toLowerCase();
       const newUser: AppUser = {
-        id: `usr_${Date.now()}`,
-        username: (userData.username || '').trim().toLowerCase(),
+        id: `usr_${cleanUsername}_${Date.now()}`,
+        username: cleanUsername,
         name: (userData.name || '').trim(),
         password: userData.password || '123456',
         role: userData.role || 'Kasir',
@@ -519,9 +549,26 @@ export default function App() {
         notes: userData.notes || '',
         lastLogin: '-',
       };
+
+      // Provision isolated workspace for this newly created account
+      const freshWorkspace = createFreshUserData(newUser);
+      saveUserStorageItem(cleanUsername, 'profile', freshWorkspace.profile);
+      saveUserStorageItem(cleanUsername, 'accounts', freshWorkspace.accounts);
+      saveUserStorageItem(cleanUsername, 'transactions', freshWorkspace.transactions);
+      saveUserStorageItem(cleanUsername, 'products', freshWorkspace.products);
+      saveUserStorageItem(cleanUsername, 'pos_sales', freshWorkspace.posSales);
+      saveUserStorageItem(cleanUsername, 'stock_logs', freshWorkspace.stockLogs);
+      saveUserStorageItem(cleanUsername, 'mutations', freshWorkspace.mutations);
+      saveUserStorageItem(cleanUsername, 'members', freshWorkspace.members);
+      saveUserStorageItem(cleanUsername, 'member_points', freshWorkspace.memberPoints);
+      saveUserStorageItem(cleanUsername, 'member_rewards', freshWorkspace.memberRewards);
+      saveUserStorageItem(cleanUsername, 'member_vouchers', freshWorkspace.voucherClaims);
+      saveUserStorageItem(cleanUsername, 'point_settings', freshWorkspace.pointSettings);
+      saveUserStorageItem(cleanUsername, 'printer_settings', freshWorkspace.printerSettings);
+
       setUsers((prev) => [...prev, newUser]);
       syncUserToSheets(newUser);
-      recordVersionChange(`Penambahan pengguna baru ${newUser.name} (${newUser.role})`, 'USER');
+      recordVersionChange(`Penambahan akun & alokasi database baru: ${newUser.name} (${newUser.role})`, 'USER');
     }
     setIsUserModalOpen(false);
     setEditingUser(null);
@@ -566,6 +613,8 @@ export default function App() {
     };
     setCurrentUser(auth);
     setCurrentRole(user.role);
+    const workspace = loadUserIsolatedData(user);
+    applyUserData(workspace);
     if (user.role === 'Kasir') {
       setActiveTab('transaksi');
     }
@@ -1577,7 +1626,7 @@ export default function App() {
     recordVersionChange(`Batal/VOID penjualan POS #${saleId}`, 'TRANSACTION');
   };
 
-  const handleRegisterUser = (userData: Partial<AppUser>) => {
+  const handleRegisterUser = (userData: Partial<AppUser>): { success: boolean; message: string; user?: AppUser } => {
     try {
       const trimmedUser = (userData.username || '').trim().toLowerCase();
       const trimmedName = (userData.name || '').trim();
@@ -1587,26 +1636,48 @@ export default function App() {
         return { success: false, message: 'Nama, username, dan kata sandi wajib diisi.' };
       }
 
+      if (trimmedUser.length < 3) {
+        return { success: false, message: 'Username minimal terdiri dari 3 karakter.' };
+      }
+
       const isDuplicate = users.some((u) => u.username.toLowerCase() === trimmedUser);
       if (isDuplicate) {
-        return { success: false, message: `Username "${trimmedUser}" sudah digunakan.` };
+        return { success: false, message: `Username "${trimmedUser}" sudah digunakan. Silakan pilih username lain.` };
       }
 
       const newUser: AppUser = {
-        id: `usr_${Date.now()}`,
+        id: `usr_${trimmedUser}_${Date.now()}`,
         username: trimmedUser,
         name: trimmedName,
         password: trimmedPin,
         role: userData.role || 'Kasir',
         status: 'ACTIVE',
         phone: userData.phone ? userData.phone.trim() : '',
-        notes: userData.notes ? userData.notes.trim() : undefined,
-        createdAt: new Date().toISOString(),
+        notes: userData.notes ? userData.notes.trim() : 'Pengguna Baru Terdaftar',
+        createdAt: formatDateTime(),
+        lastLogin: '-',
       };
+
+      // Provision isolated workspace for this newly registered user
+      const freshWorkspace = createFreshUserData(newUser);
+      saveUserStorageItem(trimmedUser, 'profile', freshWorkspace.profile);
+      saveUserStorageItem(trimmedUser, 'accounts', freshWorkspace.accounts);
+      saveUserStorageItem(trimmedUser, 'transactions', freshWorkspace.transactions);
+      saveUserStorageItem(trimmedUser, 'products', freshWorkspace.products);
+      saveUserStorageItem(trimmedUser, 'pos_sales', freshWorkspace.posSales);
+      saveUserStorageItem(trimmedUser, 'stock_logs', freshWorkspace.stockLogs);
+      saveUserStorageItem(trimmedUser, 'mutations', freshWorkspace.mutations);
+      saveUserStorageItem(trimmedUser, 'members', freshWorkspace.members);
+      saveUserStorageItem(trimmedUser, 'member_points', freshWorkspace.memberPoints);
+      saveUserStorageItem(trimmedUser, 'member_rewards', freshWorkspace.memberRewards);
+      saveUserStorageItem(trimmedUser, 'member_vouchers', freshWorkspace.voucherClaims);
+      saveUserStorageItem(trimmedUser, 'point_settings', freshWorkspace.pointSettings);
+      saveUserStorageItem(trimmedUser, 'printer_settings', freshWorkspace.printerSettings);
+
       setUsers((prev) => [...prev, newUser]);
       syncUserToSheets(newUser);
-      recordVersionChange(`Registrasi user baru ${newUser.name} (${newUser.role})`, 'USER');
-      return { success: true, message: 'Akun berhasil didaftarkan.' };
+      recordVersionChange(`Registrasi pengguna baru & alokasi database: ${newUser.name} (${newUser.role})`, 'USER');
+      return { success: true, message: 'Pendaftaran akun berhasil!', user: newUser };
     } catch (e: any) {
       return { success: false, message: e?.message || 'Terjadi kesalahan saat mendaftar.' };
     }
@@ -2008,6 +2079,15 @@ export default function App() {
               currentRole={currentRole}
               onRestoreData={handleRestoreData}
               onOpenResetModal={() => setIsResetModalOpen(true)}
+            />
+          )}
+
+          {activeTab === 'tentang-sistem' && (
+            <TentangSistemView
+              profile={profile}
+              currentUser={currentUser}
+              currentRole={currentRole}
+              onNavigateTab={(tab) => setActiveTab(tab)}
             />
           )}
         </main>
