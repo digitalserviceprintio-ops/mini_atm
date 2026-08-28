@@ -13,6 +13,13 @@ import {
   PosSale,
   PosSaleItem,
   StockAdjustmentLog,
+  CustomerMember,
+  MemberPointHistory,
+  MemberTier,
+  PointChangeType,
+  MemberRewardItem,
+  MemberVoucherClaim,
+  PointExchangeSettings,
 } from './types';
 import {
   INITIAL_ACCOUNTS,
@@ -23,6 +30,11 @@ import {
   INITIAL_USERS,
   INITIAL_POS_SALES,
   INITIAL_STOCK_LOGS,
+  INITIAL_MEMBERS,
+  INITIAL_MEMBER_POINTS,
+  INITIAL_MEMBER_REWARDS,
+  INITIAL_MEMBER_VOUCHERS,
+  INITIAL_POINT_SETTINGS,
 } from './data/initialData';
 import { Header } from './components/Header';
 import { Sidebar } from './components/Sidebar';
@@ -32,6 +44,7 @@ import { LaporanDetailView } from './components/views/LaporanDetailView';
 import { DashboardView } from './components/views/DashboardView';
 import { ArusKasView } from './components/views/ArusKasView';
 import { AkunKasView } from './components/views/AkunKasView';
+import { MemberPelangganView } from './components/views/MemberPelangganView';
 import { KasirFisikView } from './components/views/KasirFisikView';
 import { StokBarangView } from './components/views/StokBarangView';
 import { LaporanPenjualanFisikView } from './components/views/LaporanPenjualanFisikView';
@@ -49,6 +62,13 @@ import { ModalRestock } from './components/modals/ModalRestock';
 import { ModalAdjustStock } from './components/modals/ModalAdjustStock';
 import { ModalMutation } from './components/modals/ModalMutation';
 import { ModalUserAccount } from './components/modals/ModalUserAccount';
+import { ModalMemberCard } from './components/modals/ModalMemberCard';
+import { ModalMemberForm } from './components/modals/ModalMemberForm';
+import { ModalMemberDetail } from './components/modals/ModalMemberDetail';
+import { ModalRewardForm } from './components/modals/ModalRewardForm';
+import { ModalPointSettings } from './components/modals/ModalPointSettings';
+import { ModalClaimReward } from './components/modals/ModalClaimReward';
+import { ModalVoucherReceipt } from './components/modals/ModalVoucherReceipt';
 import { ModalLogout } from './components/modals/ModalLogout';
 import { ModalResetData, ResetScope } from './components/modals/ModalResetData';
 import { exportToCSV, formatDateTime } from './utils/formatters';
@@ -119,6 +139,35 @@ export default function App() {
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
+  const [members, setMembers] = useState<CustomerMember[]>(() => {
+    const saved = localStorage.getItem('miniatm_members');
+    return saved ? JSON.parse(saved) : INITIAL_MEMBERS;
+  });
+
+  const [memberPoints, setMemberPoints] = useState<MemberPointHistory[]>(() => {
+    const saved = localStorage.getItem('miniatm_member_points');
+    return saved ? JSON.parse(saved) : INITIAL_MEMBER_POINTS;
+  });
+
+  const [memberRewards, setMemberRewards] = useState<MemberRewardItem[]>(() => {
+    const saved = localStorage.getItem('miniatm_member_rewards');
+    return saved ? JSON.parse(saved) : INITIAL_MEMBER_REWARDS;
+  });
+
+  const [voucherClaims, setVoucherClaims] = useState<MemberVoucherClaim[]>(() => {
+    const saved = localStorage.getItem('miniatm_member_vouchers');
+    return saved ? JSON.parse(saved) : INITIAL_MEMBER_VOUCHERS;
+  });
+
+  const [pointSettings, setPointSettings] = useState<PointExchangeSettings>(() => {
+    try {
+      const saved = localStorage.getItem('miniatm_point_settings');
+      return saved ? { ...INITIAL_POINT_SETTINGS, ...JSON.parse(saved) } : INITIAL_POINT_SETTINGS;
+    } catch {
+      return INITIAL_POINT_SETTINGS;
+    }
+  });
+
   const [mutations, setMutations] = useState<CashMutation[]>(() => {
     const saved = localStorage.getItem('miniatm_mutations');
     return saved ? JSON.parse(saved) : [];
@@ -164,9 +213,39 @@ export default function App() {
   const [isUserModalOpen, setIsUserModalOpen] = useState<boolean>(false);
   const [editingUser, setEditingUser] = useState<AppUser | null>(null);
 
+  const [isMemberFormOpen, setIsMemberFormOpen] = useState<boolean>(false);
+  const [editingMember, setEditingMember] = useState<CustomerMember | null>(null);
+
+  const [isMemberCardOpen, setIsMemberCardOpen] = useState<boolean>(false);
+  const [selectedCardMember, setSelectedCardMember] = useState<CustomerMember | null>(null);
+
+  const [isMemberDetailOpen, setIsMemberDetailOpen] = useState<boolean>(false);
+  const [selectedDetailMember, setSelectedDetailMember] = useState<CustomerMember | null>(null);
+
+  // Rewards & Point Settings Modals
+  const [isRewardModalOpen, setIsRewardModalOpen] = useState<boolean>(false);
+  const [editingReward, setEditingReward] = useState<MemberRewardItem | null>(null);
+
+  const [isPointSettingsModalOpen, setIsPointSettingsModalOpen] = useState<boolean>(false);
+
+  const [isClaimModalOpen, setIsClaimModalOpen] = useState<boolean>(false);
+  const [selectedClaimMember, setSelectedClaimMember] = useState<CustomerMember | undefined>(undefined);
+  const [selectedClaimReward, setSelectedClaimReward] = useState<MemberRewardItem | undefined>(undefined);
+
+  const [isVoucherReceiptOpen, setIsVoucherReceiptOpen] = useState<boolean>(false);
+  const [selectedVoucherClaim, setSelectedVoucherClaim] = useState<MemberVoucherClaim | null>(null);
+
   const [isMutationModalOpen, setIsMutationModalOpen] = useState<boolean>(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+
+  // Calculate member tier helper
+  const calculateTier = (points: number): MemberTier => {
+    if (points >= 300) return 'PLATINUM';
+    if (points >= 150) return 'GOLD';
+    if (points >= 50) return 'SILVER';
+    return 'BRONZE';
+  };
 
   // Apply loaded data from Google Sheets to application state
   const handleApplyDataFromSheets = (data: AppSyncData) => {
@@ -216,6 +295,21 @@ export default function App() {
     if (payload.users && Array.isArray(payload.users)) {
       setUsers(payload.users);
     }
+    if (payload.members && Array.isArray(payload.members)) {
+      setMembers(payload.members);
+    }
+    if (payload.memberPoints && Array.isArray(payload.memberPoints)) {
+      setMemberPoints(payload.memberPoints);
+    }
+    if (payload.memberRewards && Array.isArray(payload.memberRewards)) {
+      setMemberRewards(payload.memberRewards);
+    }
+    if (payload.voucherClaims && Array.isArray(payload.voucherClaims)) {
+      setVoucherClaims(payload.voucherClaims);
+    }
+    if (payload.pointSettings) {
+      setPointSettings(payload.pointSettings);
+    }
     if (payload.profile) {
       setProfile(payload.profile);
     }
@@ -234,6 +328,11 @@ export default function App() {
       mutations,
       products,
       users,
+      members,
+      memberPoints,
+      memberRewards,
+      voucherClaims,
+      pointSettings,
     });
   };
 
@@ -247,12 +346,20 @@ export default function App() {
       setMutations([]);
       setAccounts(INITIAL_ACCOUNTS);
       setProducts(INITIAL_PRODUCTS);
+      setMembers(INITIAL_MEMBERS);
+      setMemberPoints(INITIAL_MEMBER_POINTS);
+      setMemberRewards(INITIAL_MEMBER_REWARDS);
+      setVoucherClaims(INITIAL_MEMBER_VOUCHERS);
+      setPointSettings(INITIAL_POINT_SETTINGS);
       setProfile(INITIAL_AGENT_PROFILE);
       setPrinterSettings(INITIAL_PRINTER_SETTINGS);
     } else if (scope === 'clear_all') {
       setTransactions([]);
       setMutations([]);
       setProducts([]);
+      setMembers([]);
+      setMemberPoints([]);
+      setVoucherClaims([]);
       setAccounts(INITIAL_ACCOUNTS.map((a) => ({ ...a, balance: 0 })));
     }
     setIsResetModalOpen(false);
@@ -309,6 +416,26 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem('miniatm_users', JSON.stringify(users));
   }, [users]);
+
+  useEffect(() => {
+    localStorage.setItem('miniatm_members', JSON.stringify(members));
+  }, [members]);
+
+  useEffect(() => {
+    localStorage.setItem('miniatm_member_points', JSON.stringify(memberPoints));
+  }, [memberPoints]);
+
+  useEffect(() => {
+    localStorage.setItem('miniatm_member_rewards', JSON.stringify(memberRewards));
+  }, [memberRewards]);
+
+  useEffect(() => {
+    localStorage.setItem('miniatm_member_vouchers', JSON.stringify(voucherClaims));
+  }, [voucherClaims]);
+
+  useEffect(() => {
+    localStorage.setItem('miniatm_point_settings', JSON.stringify(pointSettings));
+  }, [pointSettings]);
 
   useEffect(() => {
     localStorage.setItem('miniatm_printer_settings', JSON.stringify(printerSettings));
@@ -444,6 +571,265 @@ export default function App() {
     }
   };
 
+  // Member Pelanggan Management Handlers
+  const handleSaveMember = (memberData: Partial<CustomerMember>) => {
+    if (memberData.id) {
+      setMembers((prev) =>
+        prev.map((m) => {
+          if (m.id === memberData.id) {
+            const updated = { ...m, ...memberData } as CustomerMember;
+            updated.tier = calculateTier(updated.points);
+            return updated;
+          }
+          return m;
+        })
+      );
+      recordVersionChange(`Pembaruan member ${memberData.name}`, 'USER');
+    } else {
+      const now = new Date();
+      const randomCardSeq = Array.from({ length: 3 }, () =>
+        Math.floor(1000 + Math.random() * 9000).toString()
+      ).join(' ');
+      const cardNumber = `6011 ${randomCardSeq}`;
+      const memberNumber = `MBR-${Date.now().toString().slice(-6)}`;
+      const newMember: CustomerMember = {
+        id: `MEM-${Date.now().toString().slice(-6)}`,
+        memberNumber,
+        cardNumber,
+        name: (memberData.name || 'Member Baru').trim(),
+        phone: (memberData.phone || '').trim(),
+        email: memberData.email?.trim() || undefined,
+        address: memberData.address?.trim() || undefined,
+        points: memberData.points || 0,
+        tier: calculateTier(memberData.points || 0),
+        status: memberData.status || 'ACTIVE',
+        joinedDate: now.toISOString().split('T')[0],
+        totalSpent: 0,
+        totalTrxCount: 0,
+        notes: memberData.notes?.trim() || undefined,
+      };
+
+      setMembers((prev) => [newMember, ...prev]);
+
+      if (newMember.points > 0) {
+        const welcomeLog: MemberPointHistory = {
+          id: `LOG-PTS-${Date.now()}`,
+          memberId: newMember.id,
+          type: 'BONUS_MANUAL',
+          points: newMember.points,
+          balanceAfter: newMember.points,
+          description: 'Bonus poin pendaftaran perdana member baru',
+          time: formatDateTime(),
+          operatorName: currentUser?.name || 'Admin',
+        };
+        setMemberPoints((prev) => [welcomeLog, ...prev]);
+      }
+
+      recordVersionChange(`Pendaftaran Member Baru ${newMember.name} (${newMember.memberNumber})`, 'USER');
+    }
+    setIsMemberFormOpen(false);
+    setEditingMember(null);
+  };
+
+  const handleDeleteMember = (memberId: string) => {
+    const target = members.find((m) => m.id === memberId);
+    if (!target) return;
+    if (window.confirm(`Hapus data member "${target.name}" (${target.memberNumber})? Riwayat poin akan ikut terhapus.`)) {
+      setMembers((prev) => prev.filter((m) => m.id !== memberId));
+      setMemberPoints((prev) => prev.filter((p) => p.memberId !== memberId));
+      recordVersionChange(`Hapus member ${target.name}`, 'USER');
+      if (selectedDetailMember?.id === memberId) {
+        setIsMemberDetailOpen(false);
+        setSelectedDetailMember(null);
+      }
+      if (selectedCardMember?.id === memberId) {
+        setIsMemberCardOpen(false);
+        setSelectedCardMember(null);
+      }
+    }
+  };
+
+  const handleAdjustMemberPoints = (
+    memberId: string,
+    amount: number,
+    type: PointChangeType,
+    description: string
+  ) => {
+    const targetMember = members.find((m) => m.id === memberId);
+    if (!targetMember) return;
+
+    const isDeduction = type === 'REDEEM_POINT' || type === 'EXPIRED_POINT';
+    const pointDelta = isDeduction ? -Math.abs(amount) : Math.abs(amount);
+    const newPoints = Math.max(0, (targetMember.points || 0) + pointDelta);
+    const newTier = calculateTier(newPoints);
+
+    setMembers((prev) =>
+      prev.map((m) => (m.id === memberId ? { ...m, points: newPoints, tier: newTier } : m))
+    );
+
+    const log: MemberPointHistory = {
+      id: `LOG-PTS-${Date.now()}`,
+      memberId,
+      type,
+      points: Math.abs(amount),
+      balanceAfter: newPoints,
+      description,
+      time: formatDateTime(),
+      operatorName: currentUser?.name || 'Operator',
+    };
+
+    setMemberPoints((prev) => [log, ...prev]);
+
+    // Keep selected detail member state updated if open
+    if (selectedDetailMember?.id === memberId) {
+      setSelectedDetailMember({
+        ...selectedDetailMember,
+        points: newPoints,
+        tier: newTier,
+      });
+    }
+
+    recordVersionChange(
+      `Penyesuaian poin member ${targetMember.name}: ${pointDelta > 0 ? `+${pointDelta}` : pointDelta} Poin (${type})`,
+      'USER'
+    );
+  };
+
+  // Member Reward & Voucher Handlers
+  const handleSaveReward = (rewardData: Partial<MemberRewardItem>) => {
+    if (rewardData.id) {
+      setMemberRewards((prev) =>
+        prev.map((r) => (r.id === rewardData.id ? ({ ...r, ...rewardData } as MemberRewardItem) : r))
+      );
+      recordVersionChange(`Pembaruan hadiah/kupon: ${rewardData.name}`, 'USER');
+    } else {
+      const newReward: MemberRewardItem = {
+        id: `RWD-${Date.now()}`,
+        name: rewardData.name || 'Reward Baru',
+        category: rewardData.category || 'VOUCHER_BELANJA',
+        pointsRequired: Math.max(50, rewardData.pointsRequired || 50),
+        description: rewardData.description || '',
+        stock: rewardData.stock,
+        discountValue: rewardData.discountValue,
+        minTier: rewardData.minTier,
+        isActive: rewardData.isActive !== false,
+      };
+      setMemberRewards((prev) => [newReward, ...prev]);
+      recordVersionChange(`Tambah katalog reward: ${newReward.name} (${newReward.pointsRequired} Poin)`, 'USER');
+    }
+    setIsRewardModalOpen(false);
+    setEditingReward(null);
+  };
+
+  const handleDeleteReward = (rewardId: string) => {
+    const target = memberRewards.find((r) => r.id === rewardId);
+    if (!target) return;
+    if (window.confirm(`Hapus hadiah/voucher "${target.name}" dari katalog?`)) {
+      setMemberRewards((prev) => prev.filter((r) => r.id !== rewardId));
+      recordVersionChange(`Hapus reward ${target.name}`, 'USER');
+    }
+  };
+
+  const handleSavePointSettings = (newSettings: PointExchangeSettings) => {
+    setPointSettings(newSettings);
+    setIsPointSettingsModalOpen(false);
+    recordVersionChange(
+      `Pengaturan poin diperbarui (Min tukar: ${newSettings.minPointsRedeem} poin = Rp ${newSettings.rupiahPerStep.toLocaleString('id-ID')})`,
+      'USER'
+    );
+  };
+
+  const handleConfirmDirectClaim = (memberId: string, rewardId: string, notes?: string) => {
+    const member = members.find((m) => m.id === memberId);
+    const reward = memberRewards.find((r) => r.id === rewardId);
+    if (!member || !reward) return;
+
+    const minPoints = pointSettings?.minPointsRedeem ?? 50;
+    const pointsRequired = reward.pointsRequired || 50;
+
+    if ((member.points || 0) < pointsRequired || (member.points || 0) < minPoints) {
+      alert(`Poin member tidak mencukupi! Poin saat ini: ${member.points}, dibutuhkan: ${pointsRequired} poin (minimal penukaran ${minPoints} poin).`);
+      return;
+    }
+
+    if (reward.stock !== undefined && reward.stock <= 0) {
+      alert('Stok hadiah/kupon ini sudah habis.');
+      return;
+    }
+
+    const newPoints = Math.max(0, (member.points || 0) - pointsRequired);
+    const newTier = calculateTier(newPoints);
+    const claimTime = formatDateTime();
+    const voucherCode = `VCH-${Date.now().toString().slice(-6)}`;
+
+    // 1. Deduct points from member
+    setMembers((prev) =>
+      prev.map((m) => (m.id === memberId ? { ...m, points: newPoints, tier: newTier } : m))
+    );
+
+    // 2. Reduce stock if finite
+    if (reward.stock !== undefined) {
+      setMemberRewards((prev) =>
+        prev.map((r) => (r.id === rewardId ? { ...r, stock: Math.max(0, r.stock - 1) } : r))
+      );
+    }
+
+    // 3. Create active voucher claim record
+    const newClaim: MemberVoucherClaim = {
+      id: `CLM-${Date.now()}`,
+      voucherCode,
+      memberId: member.id,
+      memberName: member.name,
+      memberNumber: member.memberNumber,
+      rewardId: reward.id,
+      rewardName: reward.name,
+      category: reward.category,
+      pointsUsed: pointsRequired,
+      discountValue: reward.discountValue || 0,
+      claimDate: claimTime,
+      status: 'ACTIVE',
+      operatorName: currentUser?.name || 'Operator',
+      notes,
+    };
+    setVoucherClaims((prev) => [newClaim, ...prev]);
+
+    // 4. Log point history
+    const pointLog: MemberPointHistory = {
+      id: `LOG-PTS-${Date.now()}`,
+      memberId: member.id,
+      type: 'REDEEM_POINT',
+      points: -pointsRequired,
+      balanceAfter: newPoints,
+      refNumber: voucherCode,
+      description: `Klaim Reward: ${reward.name} (-${pointsRequired} Poin)`,
+      time: claimTime,
+      operatorName: currentUser?.name || 'Operator',
+    };
+    setMemberPoints((prev) => [pointLog, ...prev]);
+
+    recordVersionChange(`Klaim reward ${reward.name} (${voucherCode}) oleh ${member.name}`, 'USER');
+
+    // 5. Open voucher receipt dialog
+    setSelectedVoucherClaim(newClaim);
+    setIsVoucherReceiptOpen(true);
+  };
+
+  const handleToggleVoucherUsed = (claimId: string) => {
+    setVoucherClaims((prev) =>
+      prev.map((v) => {
+        if (v.id === claimId) {
+          const isCurrentlyActive = v.status === 'ACTIVE';
+          return {
+            ...v,
+            status: isCurrentlyActive ? 'USED' : 'ACTIVE',
+            usedDate: isCurrentlyActive ? formatDateTime() : undefined,
+          };
+        }
+        return v;
+      })
+    );
+  };
+
   // Transaction Handlers
   const handleSaveTrx = (trxData: Partial<Transaction>) => {
     if (trxData.id) {
@@ -480,9 +866,83 @@ export default function App() {
         phoneCust: trxData.phoneCust,
         notes: trxData.notes,
         refNumber: `REF-${Date.now().toString().slice(-8)}`,
+        memberId: trxData.memberId,
+        memberNumber: trxData.memberNumber,
       };
 
       setTransactions((prev) => [newTrx, ...prev]);
+
+      // Handle Member Points: +1 point earned and points redeemed if any
+      if (newTrx.memberId) {
+        const member = members.find((m) => m.id === newTrx.memberId);
+        if (member) {
+          const pointsEarned = 1;
+          const pointsRedeemed = trxData.pointsRedeemed || 0;
+          const newPoints = Math.max(0, (member.points || 0) + pointsEarned - pointsRedeemed);
+          const newTier = calculateTier(newPoints);
+
+          setMembers((prev) =>
+            prev.map((m) =>
+              m.id === newTrx.memberId
+                ? {
+                    ...m,
+                    points: newPoints,
+                    tier: newTier,
+                    totalSpent: (m.totalSpent || 0) + newTrx.nominal + newTrx.feeCust,
+                    totalTrxCount: (m.totalTrxCount || 0) + 1,
+                  }
+                : m
+            )
+          );
+
+          const pointLogEarn: MemberPointHistory = {
+            id: `LOG-PTS-${Date.now()}-1`,
+            memberId: newTrx.memberId,
+            type: 'EARN_TRX_MINI_ATM',
+            points: 1,
+            balanceAfter: (member.points || 0) + 1,
+            refNumber: newTrx.id,
+            description: `Reward +1 Poin Transaksi Mini ATM #${newTrx.id} (${newTrx.type})`,
+            time: newTrx.time,
+            operatorName: currentUser?.name || 'Operator',
+          };
+
+          const newLogs: MemberPointHistory[] = [pointLogEarn];
+
+          if (pointsRedeemed > 0) {
+            const pointLogRedeem: MemberPointHistory = {
+              id: `LOG-PTS-${Date.now()}-2`,
+              memberId: newTrx.memberId,
+              type: 'REDEEM_TRX_DISCOUNT',
+              points: -pointsRedeemed,
+              balanceAfter: newPoints,
+              refNumber: newTrx.id,
+              description: `Tukar ${pointsRedeemed} Poin untuk Diskon Transaksi #${newTrx.id} (Hemat Rp ${(trxData.discountFromPoints || 0).toLocaleString('id-ID')})`,
+              time: newTrx.time,
+              operatorName: currentUser?.name || 'Operator',
+            };
+            newLogs.unshift(pointLogRedeem);
+          }
+
+          setMemberPoints((prev) => [...newLogs, ...prev]);
+
+          // Mark voucher as USED if applied
+          if (trxData.voucherClaimId) {
+            setVoucherClaims((prev) =>
+              prev.map((v) =>
+                v.id === trxData.voucherClaimId
+                  ? {
+                      ...v,
+                      status: 'USED',
+                      usedDate: newTrx.time,
+                      usedRefNumber: newTrx.id,
+                    }
+                  : v
+              )
+            );
+          }
+        }
+      }
 
       // Adjust account balance accordingly
       const profit = newTrx.feeCust - newTrx.feeAdmin;
@@ -807,23 +1267,49 @@ export default function App() {
     total: number,
     paymentMethod: string = 'Tunai',
     customerName?: string,
-    notes?: string
+    notes?: string,
+    memberId?: string,
+    pointsRedeemed: number = 0,
+    discountFromPoints: number = 0,
+    voucherClaimId?: string
   ) => {
     const saleId = `POS-${Date.now().toString().slice(-6)}`;
     const invoiceNum = `INV-${Date.now().toString().slice(-8)}`;
     const saleTime = formatDateTime();
+    const selectedMember = memberId ? members.find((m) => m.id === memberId) : null;
 
-    // 1. Calculate items, costs, and profit
+    // 1. Calculate items, costs, discounts, and profit
     let totalCost = 0;
     let totalQty = 0;
+    let totalBeforeDiscount = 0;
+    let totalDiscount = 0;
+
     const saleItems: PosSaleItem[] = cart.map((c) => {
       const prod = products.find((p) => p.id === c.id);
       const buyPrice = c.buyPrice !== undefined ? c.buyPrice : (prod?.buyPrice !== undefined ? prod.buyPrice : c.price * 0.8);
       const itemCost = buyPrice * c.qty;
-      const subtotal = c.price * c.qty;
+      const originalSubtotal = c.price * c.qty;
+
+      // Calculate item discount amount
+      let itemDiscountAmount = 0;
+      if (c.discountValue && c.discountValue > 0) {
+        if (c.discountType === 'percent') {
+          const rate = Math.min(100, Math.max(0, c.discountValue));
+          itemDiscountAmount = Math.round((originalSubtotal * rate) / 100);
+        } else {
+          const perUnit = Math.min(c.price, Math.max(0, c.discountValue));
+          itemDiscountAmount = perUnit * c.qty;
+        }
+      } else if (c.discountAmount && c.discountAmount > 0) {
+        itemDiscountAmount = c.discountAmount;
+      }
+
+      const subtotal = Math.max(0, originalSubtotal - itemDiscountAmount);
       const profit = subtotal - itemCost;
       totalCost += itemCost;
       totalQty += c.qty;
+      totalBeforeDiscount += originalSubtotal;
+      totalDiscount += itemDiscountAmount;
 
       return {
         productId: c.id,
@@ -833,13 +1319,17 @@ export default function App() {
         unit: c.unit || prod?.unit || 'Pcs',
         price: c.price,
         buyPrice,
+        discountType: c.discountType,
+        discountValue: c.discountValue,
+        discountAmount: itemDiscountAmount,
         subtotal,
         totalCost: itemCost,
         profit,
       };
     });
 
-    const totalProfit = total - totalCost;
+    const netRevenue = Math.max(0, totalBeforeDiscount - totalDiscount - (discountFromPoints || 0));
+    const totalProfit = netRevenue - totalCost;
 
     // 2. Deduct stock for each purchased item
     const newStockLogs: StockAdjustmentLog[] = [];
@@ -877,42 +1367,122 @@ export default function App() {
       time: saleTime,
       cashierName: currentUser?.name || 'Kasir',
       cashierRole: currentRole,
-      customerName: customerName || 'Pelanggan Umum',
+      customerName: selectedMember ? selectedMember.name : (customerName || 'Pelanggan Umum'),
       items: saleItems,
       totalQty,
-      totalRevenue: total,
+      totalBeforeDiscount,
+      totalDiscount: totalDiscount + (discountFromPoints || 0),
+      totalRevenue: netRevenue,
       totalCost,
       grossProfit: totalProfit,
       paymentMethod,
       accountId: accounts[0]?.id || 'acc1',
       status: 'SUCCESS',
       notes,
+      memberId: memberId || undefined,
+      memberNumber: selectedMember?.memberNumber || undefined,
     };
     setPosSales((prev) => [newPosSale, ...prev]);
 
-    const itemsSummary = cart.map((c) => `${c.name} (${c.qty}x)`).join(', ');
+    // Award +1 Poin to Member and handle point/voucher redemption
+    if (memberId && selectedMember) {
+      const pointsEarned = 1;
+      const ptsRedeemed = pointsRedeemed || 0;
+      const newPoints = Math.max(0, (selectedMember.points || 0) + pointsEarned - ptsRedeemed);
+      const newTier = calculateTier(newPoints);
+
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.id === memberId
+            ? {
+                ...m,
+                points: newPoints,
+                tier: newTier,
+                totalSpent: (m.totalSpent || 0) + netRevenue,
+                totalTrxCount: (m.totalTrxCount || 0) + 1,
+              }
+            : m
+        )
+      );
+
+      const posPointLog: MemberPointHistory = {
+        id: `LOG-PTS-${Date.now()}-1`,
+        memberId,
+        type: 'EARN_TRX_POS',
+        points: 1,
+        balanceAfter: (selectedMember.points || 0) + 1,
+        refNumber: saleId,
+        description: `Reward +1 Poin Transaksi Kasir POS #${saleId} (${totalQty} item)`,
+        time: saleTime,
+        operatorName: currentUser?.name || 'Kasir',
+      };
+
+      const newLogs: MemberPointHistory[] = [posPointLog];
+
+      if (ptsRedeemed > 0) {
+        const redeemLog: MemberPointHistory = {
+          id: `LOG-PTS-${Date.now()}-2`,
+          memberId,
+          type: 'REDEEM_POS_DISCOUNT',
+          points: -ptsRedeemed,
+          balanceAfter: newPoints,
+          refNumber: saleId,
+          description: `Tukar ${ptsRedeemed} Poin Diskon Kasir POS #${saleId} (Hemat Rp ${(discountFromPoints || 0).toLocaleString('id-ID')})`,
+          time: saleTime,
+          operatorName: currentUser?.name || 'Kasir',
+        };
+        newLogs.unshift(redeemLog);
+      }
+
+      setMemberPoints((prev) => [...newLogs, ...prev]);
+
+      // If voucher was claimed and used, mark as USED
+      if (voucherClaimId) {
+        setVoucherClaims((prev) =>
+          prev.map((v) =>
+            v.id === voucherClaimId
+              ? { ...v, status: 'USED', usedDate: saleTime, usedRefNumber: saleId }
+              : v
+          )
+        );
+      }
+    }
+
+    const itemsSummary = cart
+      .map((c) => {
+        const disc =
+          c.discountValue && c.discountValue > 0
+            ? ` [Disc ${c.discountType === 'percent' ? `${c.discountValue}%` : `Rp ${c.discountValue.toLocaleString('id-ID')}`}]`
+            : '';
+        return `${c.name} (${c.qty}x)${disc}`;
+      })
+      .join(', ');
+
+    const discInfo = totalDiscount > 0 ? ` (Diskon: -Rp ${totalDiscount.toLocaleString('id-ID')})` : '';
 
     // 4. Add as financial transaction
     const newTrx: Transaction = {
       id: `TRX-${transactions.length + 101}`,
       time: saleTime,
       type: 'PEMBAYARAN',
-      cust: customerName || 'Pelanggan Kasir POS',
+      cust: selectedMember ? selectedMember.name : (customerName || 'Pelanggan Kasir POS'),
       target: 'Penjualan Barang Fisik / POS',
-      nominal: total,
+      nominal: netRevenue,
       feeCust: 0,
       feeAdmin: 0,
       status: 'SUCCESS',
       accountId: accounts[0]?.id || 'acc1',
-      notes: `POS #${saleId}: ${itemsSummary} (Laba: Rp ${totalProfit.toLocaleString('id-ID')})`,
+      notes: `POS #${saleId}: ${itemsSummary}${discInfo} (Laba: Rp ${totalProfit.toLocaleString('id-ID')})`,
       refNumber: saleId,
+      memberId: memberId || undefined,
+      memberNumber: selectedMember?.memberNumber || undefined,
     };
 
     setTransactions((prev) => [newTrx, ...prev]);
 
     // 5. Add to account balance
     const updatedAccounts = accounts.map((acc) =>
-      acc.id === newTrx.accountId ? { ...acc, balance: acc.balance + total } : acc
+      acc.id === newTrx.accountId ? { ...acc, balance: acc.balance + netRevenue } : acc
     );
     setAccounts(updatedAccounts);
 
@@ -922,7 +1492,7 @@ export default function App() {
       time: newTrx.time,
       accountId: newTrx.accountId,
       type: 'MASUK',
-      amount: total,
+      amount: netRevenue,
       feeMargin: totalProfit,
       description: `Penjualan Kasir POS #${saleId} [${paymentMethod}] (${itemsSummary})`,
       relatedTrxId: newTrx.id,
@@ -931,7 +1501,7 @@ export default function App() {
 
     // 7. Auto-sync to Google Sheets (Products, POS Sale, Stock Logs, Transaction, Accounts, Mutation)
     syncCheckoutPOSToSheets(updatedProducts, newTrx, updatedAccounts, posMut, newPosSale, newStockLogs);
-    recordVersionChange(`Penjualan POS #${saleId} (${totalQty} item) Rp ${total.toLocaleString('id-ID')}`, 'TRANSACTION');
+    recordVersionChange(`Penjualan POS #${saleId} (${totalQty} item) Rp ${netRevenue.toLocaleString('id-ID')}${totalDiscount > 0 ? ` [Diskon Rp ${totalDiscount.toLocaleString('id-ID')}]` : ''}`, 'TRANSACTION');
 
     // 8. Open receipt modal
     setReceiptTrx(newTrx);
@@ -1127,6 +1697,7 @@ export default function App() {
           profile={profile}
           trxCount={transactions.length}
           userCount={users.length}
+          memberCount={members.length}
           currentUser={currentUser}
           currentRole={currentRole}
           onLogout={handleLogout}
@@ -1188,6 +1759,72 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'member-pelanggan' && (
+            <MemberPelangganView
+              members={members}
+              pointLogs={memberPoints}
+              pointHistory={memberPoints}
+              rewards={memberRewards}
+              voucherClaims={voucherClaims}
+              pointSettings={pointSettings}
+              transactions={transactions}
+              posSales={posSales}
+              profile={profile}
+              currentRole={currentRole}
+              onOpenAddMember={() => {
+                setEditingMember(null);
+                setIsMemberFormOpen(true);
+              }}
+              onOpenNewMember={() => {
+                setEditingMember(null);
+                setIsMemberFormOpen(true);
+              }}
+              onEditMember={(m) => {
+                setEditingMember(m);
+                setIsMemberFormOpen(true);
+              }}
+              onDeleteMember={handleDeleteMember}
+              onOpenCardModal={(m) => {
+                setSelectedCardMember(m);
+                setIsMemberCardOpen(true);
+              }}
+              onViewCard={(m) => {
+                setSelectedCardMember(m);
+                setIsMemberCardOpen(true);
+              }}
+              onOpenDetailModal={(m) => {
+                setSelectedDetailMember(m);
+                setIsMemberDetailOpen(true);
+              }}
+              onViewDetail={(m) => {
+                setSelectedDetailMember(m);
+                setIsMemberDetailOpen(true);
+              }}
+              onOpenAddReward={() => {
+                setEditingReward(null);
+                setIsRewardModalOpen(true);
+              }}
+              onEditReward={(r) => {
+                setEditingReward(r);
+                setIsRewardModalOpen(true);
+              }}
+              onDeleteReward={handleDeleteReward}
+              onOpenPointSettings={() => setIsPointSettingsModalOpen(true)}
+              onOpenClaimModal={(m, r) => {
+                setSelectedClaimMember(m);
+                setSelectedClaimReward(r);
+                setIsClaimModalOpen(true);
+              }}
+              onViewVoucherReceipt={(vch) => {
+                setSelectedVoucherClaim(vch);
+                setIsVoucherReceiptOpen(true);
+              }}
+              onToggleVoucherUsed={handleToggleVoucherUsed}
+              onNavigateToTrx={() => setActiveTab('transaksi')}
+              onNavigateToPOS={() => setActiveTab('kasir-fisik')}
+            />
+          )}
+
           {activeTab === 'laporan-detail' && (
             <LaporanDetailView
               transactions={transactions}
@@ -1242,6 +1879,9 @@ export default function App() {
           {activeTab === 'kasir-fisik' && (
             <KasirFisikView
               products={products}
+              members={members}
+              pointSettings={pointSettings}
+              activeVouchers={voucherClaims}
               currentRole={currentRole}
               operatorName={currentUser?.name || 'Kasir'}
               onOpenNewProduct={(initialBarcode) => {
@@ -1361,6 +2001,8 @@ export default function App() {
               accounts={accounts}
               products={products}
               users={users}
+              members={members}
+              memberPoints={memberPoints}
               profile={profile}
               printerSettings={printerSettings}
               currentRole={currentRole}
@@ -1381,6 +2023,9 @@ export default function App() {
         onSave={handleSaveTrx}
         editingTrx={editingTrx}
         accounts={accounts}
+        members={members}
+        pointSettings={pointSettings}
+        activeVouchers={voucherClaims}
       />
 
       <ModalReceipt
@@ -1470,6 +2115,94 @@ export default function App() {
         existingUsers={users}
       />
 
+      <ModalMemberForm
+        isOpen={isMemberFormOpen}
+        onClose={() => {
+          setIsMemberFormOpen(false);
+          setEditingMember(null);
+        }}
+        onSave={handleSaveMember}
+        editingMember={editingMember}
+        existingMembersCount={members.length}
+      />
+
+      <ModalMemberCard
+        isOpen={isMemberCardOpen}
+        onClose={() => {
+          setIsMemberCardOpen(false);
+          setSelectedCardMember(null);
+        }}
+        member={selectedCardMember}
+        profile={profile}
+      />
+
+      <ModalMemberDetail
+        isOpen={isMemberDetailOpen}
+        onClose={() => {
+          setIsMemberDetailOpen(false);
+          setSelectedDetailMember(null);
+        }}
+        member={selectedDetailMember}
+        pointHistory={memberPoints}
+        transactions={transactions}
+        posSales={posSales}
+        profile={profile}
+        onOpenCardModal={(m) => {
+          setSelectedCardMember(m);
+          setIsMemberCardOpen(true);
+        }}
+        onOpenEditModal={(m) => {
+          setEditingMember(m);
+          setIsMemberFormOpen(true);
+        }}
+        onAdjustPoints={handleAdjustMemberPoints}
+      />
+
+      {/* Rewards, Points & Voucher Modals */}
+      <ModalRewardForm
+        isOpen={isRewardModalOpen}
+        onClose={() => {
+          setIsRewardModalOpen(false);
+          setEditingReward(null);
+        }}
+        onSave={handleSaveReward}
+        onDelete={handleDeleteReward}
+        editingReward={editingReward}
+      />
+
+      <ModalPointSettings
+        isOpen={isPointSettingsModalOpen}
+        onClose={() => setIsPointSettingsModalOpen(false)}
+        onSave={handleSavePointSettings}
+        currentSettings={pointSettings}
+      />
+
+      <ModalClaimReward
+        isOpen={isClaimModalOpen}
+        onClose={() => {
+          setIsClaimModalOpen(false);
+          setSelectedClaimMember(null);
+          setSelectedClaimReward(null);
+        }}
+        onConfirmClaim={handleConfirmDirectClaim}
+        members={members}
+        rewards={memberRewards}
+        member={selectedClaimMember}
+        reward={selectedClaimReward}
+        pointSettings={pointSettings}
+      />
+
+      <ModalVoucherReceipt
+        isOpen={isVoucherReceiptOpen}
+        onClose={() => {
+          setIsVoucherReceiptOpen(false);
+          setSelectedVoucherClaim(null);
+        }}
+        voucher={selectedVoucherClaim}
+        profile={profile}
+        printerSettings={printerSettings}
+      />
+
       <ModalLogout
         isOpen={isLogoutModalOpen}
         onClose={() => setIsLogoutModalOpen(false)}
@@ -1487,6 +2220,7 @@ export default function App() {
         mutationCount={mutations.length}
         productCount={products.length}
         userCount={users.length}
+        memberCount={members.length}
       />
     </div>
   );

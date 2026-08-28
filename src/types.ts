@@ -16,6 +16,11 @@ export interface Transaction {
   phoneCust?: string;
   notes?: string;
   refNumber?: string;
+  memberId?: string;
+  memberNumber?: string;
+  pointsRedeemed?: number;
+  discountFromPoints?: number;
+  voucherClaimId?: string;
 }
 
 export type AccountType = 'Kas' | 'Bank' | 'E-Wallet';
@@ -51,6 +56,9 @@ export interface CartItem {
   maxStock: number;
   category?: string;
   unit?: string;
+  discountType?: 'percent' | 'nominal';
+  discountValue?: number;
+  discountAmount?: number;
 }
 
 export interface PosSaleItem {
@@ -61,6 +69,9 @@ export interface PosSaleItem {
   buyPrice: number;
   qty: number;
   unit?: string;
+  discountType?: 'percent' | 'nominal';
+  discountValue?: number;
+  discountAmount?: number;
   subtotal: number;
   totalCost: number;
   profit: number;
@@ -74,6 +85,8 @@ export interface PosSale {
   cashierRole?: UserRole;
   items: PosSaleItem[];
   totalQty: number;
+  totalBeforeDiscount?: number;
+  totalDiscount?: number;
   totalRevenue: number;
   totalCost: number;
   grossProfit: number;
@@ -81,9 +94,114 @@ export interface PosSale {
   accountId: string;
   customerName?: string;
   customerPhone?: string;
+  memberId?: string;
+  memberNumber?: string;
+  pointsRedeemed?: number;
+  discountFromPoints?: number;
+  voucherClaimId?: string;
   notes?: string;
   relatedTrxId?: string;
   status?: 'SUCCESS' | 'VOID';
+}
+
+export type MemberTier = 'Bronze' | 'Silver' | 'Gold' | 'Platinum' | 'VIP' | 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM';
+
+export type RewardCategory =
+  | 'DISCOUNT_TRX'
+  | 'DISCOUNT_POS'
+  | 'FREE_ADMIN'
+  | 'PHYSICAL_GIFT'
+  | 'CASHBACK'
+  | 'VOUCHER_BELANJA';
+
+export interface MemberRewardItem {
+  id: string;
+  name: string;
+  category: RewardCategory;
+  pointsRequired: number; // Minimal 50 poin
+  discountValue?: number; // Nilai potongan dlm Rupiah jika jenis diskon
+  stock?: number; // Kuota / stok hadiah
+  description: string;
+  status?: 'ACTIVE' | 'INACTIVE';
+  isActive?: boolean;
+  minTier?: MemberTier;
+  icon?: string;
+  createdAt?: string;
+}
+
+export interface MemberVoucherClaim {
+  id: string;
+  voucherCode: string;
+  memberId: string;
+  memberName: string;
+  memberNumber: string;
+  rewardId: string;
+  rewardName: string;
+  category: RewardCategory;
+  pointsUsed: number;
+  discountValue: number;
+  claimDate: string;
+  usedDate?: string;
+  relatedRefNumber?: string;
+  usedRefNumber?: string;
+  status: 'ACTIVE' | 'USED' | 'EXPIRED';
+  notes?: string;
+  operatorName?: string;
+}
+
+export interface PointExchangeSettings {
+  minPointsRedeem: number; // Minimal poin bisa ditukarkan, default 50
+  pointsPerStep: number; // Kelipatan penukaran poin, default 50
+  rupiahPerStep: number; // Nilai Rupiah per kelipatan poin, default 5000 (50 poin = Rp 5.000)
+  enableDirectDiscounts: boolean;
+}
+
+export interface CustomerMember {
+  id: string;
+  memberNumber: string;
+  cardNumber?: string;
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  points: number;
+  tier: MemberTier;
+  joinDate?: string;
+  joinedDate?: string;
+  totalTransactions?: number;
+  totalTrxCount?: number;
+  totalSpent?: number;
+  barcode?: string;
+  status: 'ACTIVE' | 'INACTIVE';
+  notes?: string;
+}
+
+export type PointChangeType =
+  | 'EARN_TRX'
+  | 'EARN_POS'
+  | 'EARN_TRX_MINI_ATM'
+  | 'EARN_TRX_POS'
+  | 'REDEEM'
+  | 'REDEEM_POINT'
+  | 'REDEEM_TRX_DISCOUNT'
+  | 'REDEEM_POS_DISCOUNT'
+  | 'BONUS'
+  | 'BONUS_MANUAL'
+  | 'ADJUSTMENT'
+  | 'EXPIRED_POINT';
+
+export interface MemberPointHistory {
+  id: string;
+  memberId: string;
+  time: string;
+  points?: number;
+  pointsChange?: number;
+  balanceAfter?: number;
+  type: PointChangeType;
+  refNumber?: string;
+  referenceId?: string;
+  description: string;
+  operatorName?: string;
 }
 
 export type StockLogType =
@@ -181,6 +299,7 @@ export type ActiveTab =
   | 'arus-kas'
   | 'akun-kas'
   | 'kasir-fisik'
+  | 'member-pelanggan'
   | 'hak-akses'
   | 'profil-agen'
   | 'setting-printer'

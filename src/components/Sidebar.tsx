@@ -36,6 +36,7 @@ interface SidebarProps {
   profile: AgentProfile;
   trxCount: number;
   userCount?: number;
+  memberCount?: number;
   currentUser?: AuthUser | null;
   currentRole?: UserRole;
   onLogout?: () => void;
@@ -49,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   profile,
   trxCount,
   userCount = 0,
+  memberCount = 0,
   currentUser,
   currentRole = 'Admin',
   onLogout,
@@ -187,6 +189,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <ShoppingCart className="w-4 h-4 text-blue-300" />
                 <span className="flex-1">Kasir POS (Jual Barang)</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('member-pelanggan')}
+                id="nav-member-pelanggan"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'member-pelanggan'
+                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-bold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <UserCheck className={`w-4 h-4 ${activeTab === 'member-pelanggan' ? 'text-slate-950' : 'text-amber-400'}`} />
+                <span className="flex-1">Member & Kartu VIP</span>
+                <span
+                  className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded border ${
+                    activeTab === 'member-pelanggan'
+                      ? 'bg-slate-950 text-amber-300 border-slate-900'
+                      : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                  }`}
+                >
+                  +1 Poin
+                </span>
               </button>
 
               <button

@@ -22,6 +22,8 @@ import {
   AgentProfile,
   AppUser,
   CashMutation,
+  CustomerMember,
+  MemberPointHistory,
   PrinterSettings,
   Product,
   Transaction,
@@ -37,6 +39,8 @@ interface BackupResetViewProps {
   accounts: Account[];
   products: Product[];
   users: AppUser[];
+  members?: CustomerMember[];
+  memberPoints?: MemberPointHistory[];
   profile: AgentProfile;
   printerSettings: PrinterSettings;
   currentRole: UserRole;
@@ -50,6 +54,8 @@ export const BackupResetView: React.FC<BackupResetViewProps> = ({
   accounts,
   products,
   users,
+  members = [],
+  memberPoints = [],
   profile,
   printerSettings,
   currentRole,
@@ -74,6 +80,8 @@ export const BackupResetView: React.FC<BackupResetViewProps> = ({
       accounts,
       products,
       users,
+      members,
+      memberPoints,
       profile,
       printerSettings,
     });
@@ -293,6 +301,8 @@ export const BackupResetView: React.FC<BackupResetViewProps> = ({
                   <span>Tanggal: <strong>{parsedRestoreData.backupDate || '-'}</strong></span>
                   <span>Versi: <strong>{parsedRestoreData.version || '2.0'}</strong></span>
                   <span>Transaksi: <strong>{parsedRestoreData.transactions?.length || 0}</strong></span>
+                  <span>Member VIP: <strong>{parsedRestoreData.members?.length || 0}</strong></span>
+                  <span>Riwayat Poin: <strong>{parsedRestoreData.memberPoints?.length || 0}</strong></span>
                   <span>Mutasi Kas: <strong>{parsedRestoreData.mutations?.length || 0}</strong></span>
                   <span>Akun Kas: <strong>{parsedRestoreData.accounts?.length || 0}</strong></span>
                   <span>Produk: <strong>{parsedRestoreData.products?.length || 0}</strong></span>

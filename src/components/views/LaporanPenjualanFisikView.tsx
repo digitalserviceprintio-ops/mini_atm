@@ -22,6 +22,7 @@ import {
   Activity,
   RotateCcw,
   Clock,
+  Tag,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -1311,17 +1312,43 @@ export const LaporanPenjualanFisikView: React.FC<LaporanPenjualanFisikViewProps>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {selectedSaleDetail.items.map((it, idx) => (
-                      <tr key={idx}>
-                        <td className="p-2.5 font-medium text-slate-900">{it.productName}</td>
-                        <td className="p-2.5 text-center font-bold">{it.qty}</td>
-                        <td className="p-2.5 text-right font-mono">{formatRp(it.subtotal)}</td>
-                        <td className="p-2.5 text-right font-mono text-slate-500">{formatRp(it.totalCost)}</td>
-                        <td className="p-2.5 text-right font-mono font-bold text-emerald-700">
-                          +{formatRp(it.profit)}
-                        </td>
-                      </tr>
-                    ))}
+                    {selectedSaleDetail.items.map((it, idx) => {
+                      const hasDiscount = (it.discountAmount && it.discountAmount > 0) || (it.discountValue && it.discountValue > 0);
+                      const originalPrice = it.price * it.qty;
+
+                      return (
+                        <tr key={idx}>
+                          <td className="p-2.5 font-medium text-slate-900">
+                            <div>{it.productName}</div>
+                            {hasDiscount && (
+                              <div className="flex items-center gap-1 text-[10px] text-emerald-700 font-semibold mt-0.5">
+                                <Tag className="w-2.5 h-2.5" />
+                                <span>
+                                  Diskon{' '}
+                                  {it.discountType === 'percent'
+                                    ? `${it.discountValue}%`
+                                    : `-Rp ${it.discountValue?.toLocaleString('id-ID')}`}{' '}
+                                  (-{formatRp(it.discountAmount || 0)})
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-2.5 text-center font-bold">{it.qty}</td>
+                          <td className="p-2.5 text-right font-mono">
+                            {hasDiscount && (
+                              <span className="text-[10px] text-slate-400 line-through block">
+                                {formatRp(originalPrice)}
+                              </span>
+                            )}
+                            <span className="font-bold text-slate-900">{formatRp(it.subtotal)}</span>
+                          </td>
+                          <td className="p-2.5 text-right font-mono text-slate-500">{formatRp(it.totalCost)}</td>
+                          <td className="p-2.5 text-right font-mono font-bold text-emerald-700">
+                            +{formatRp(it.profit)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1329,8 +1356,23 @@ export const LaporanPenjualanFisikView: React.FC<LaporanPenjualanFisikViewProps>
 
             {/* Grand Total */}
             <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-1.5 text-xs">
+              {selectedSaleDetail.totalBeforeDiscount && selectedSaleDetail.totalDiscount ? (
+                <>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Subtotal Kotor:</span>
+                    <span className="font-mono">{formatRp(selectedSaleDetail.totalBeforeDiscount)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-700 font-semibold">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3 h-3 text-emerald-600" />
+                      <span>Total Potongan Diskon:</span>
+                    </span>
+                    <span className="font-mono">- {formatRp(selectedSaleDetail.totalDiscount)}</span>
+                  </div>
+                </>
+              ) : null}
               <div className="flex justify-between">
-                <span className="text-slate-600">Total Omzet Penjualan:</span>
+                <span className="text-slate-600 font-semibold">Total Omzet Penjualan (Netto):</span>
                 <span className="font-bold font-mono text-slate-900">
                   {formatRp(selectedSaleDetail.totalRevenue)}
                 </span>

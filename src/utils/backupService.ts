@@ -1,4 +1,17 @@
-import { Account, AgentProfile, AppUser, CashMutation, PrinterSettings, Product, Transaction } from '../types';
+import {
+  Account,
+  AgentProfile,
+  AppUser,
+  CashMutation,
+  CustomerMember,
+  MemberPointHistory,
+  MemberRewardItem,
+  MemberVoucherClaim,
+  PointExchangeSettings,
+  PrinterSettings,
+  Product,
+  Transaction,
+} from '../types';
 import { formatDateTime } from './formatters';
 
 export interface AppBackupPayload {
@@ -13,12 +26,20 @@ export interface AppBackupPayload {
   mutations: CashMutation[];
   products: Product[];
   users: AppUser[];
+  members?: CustomerMember[];
+  memberPoints?: MemberPointHistory[];
+  memberRewards?: MemberRewardItem[];
+  voucherClaims?: MemberVoucherClaim[];
+  pointSettings?: PointExchangeSettings;
   summary: {
     totalTransactions: number;
     totalMutations: number;
     totalAccounts: number;
     totalProducts: number;
     totalUsers: number;
+    totalMembers?: number;
+    totalRewards?: number;
+    totalVouchers?: number;
     totalCashBalance: number;
   };
 }
@@ -34,13 +55,18 @@ export function downloadBackupJSON(data: {
   users: AppUser[];
   profile: AgentProfile;
   printerSettings: PrinterSettings;
+  members?: CustomerMember[];
+  memberPoints?: MemberPointHistory[];
+  memberRewards?: MemberRewardItem[];
+  voucherClaims?: MemberVoucherClaim[];
+  pointSettings?: PointExchangeSettings;
 }): void {
   const totalBalance = data.accounts.reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
   const now = new Date();
 
   const payload: AppBackupPayload = {
     app: 'Mini ATM Agent & Kasir POS',
-    version: '2.5.0',
+    version: '2.6.0',
     backupTimestamp: now.toISOString(),
     backupDate: formatDateTime(now),
     profile: data.profile,
@@ -50,12 +76,20 @@ export function downloadBackupJSON(data: {
     mutations: data.mutations,
     products: data.products,
     users: data.users,
+    members: data.members || [],
+    memberPoints: data.memberPoints || [],
+    memberRewards: data.memberRewards || [],
+    voucherClaims: data.voucherClaims || [],
+    pointSettings: data.pointSettings,
     summary: {
       totalTransactions: data.transactions.length,
       totalMutations: data.mutations.length,
       totalAccounts: data.accounts.length,
       totalProducts: data.products.length,
       totalUsers: data.users.length,
+      totalMembers: data.members?.length || 0,
+      totalRewards: data.memberRewards?.length || 0,
+      totalVouchers: data.voucherClaims?.length || 0,
       totalCashBalance: totalBalance,
     },
   };

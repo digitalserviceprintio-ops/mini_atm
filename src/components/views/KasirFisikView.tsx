@@ -21,16 +21,25 @@ import {
   QrCode,
   Zap,
   BellRing,
+  Tag,
+  Percent,
+  Coins,
+  Award,
+  UserCheck,
 } from 'lucide-react';
-import { CartItem, Product, UserRole } from '../../types';
+import { CartItem, CustomerMember, MemberVoucherClaim, PointExchangeSettings, Product, UserRole } from '../../types';
 import { formatRp } from '../../utils/formatters';
 import { ModalBarcodeCameraScanner } from '../modals/ModalBarcodeCameraScanner';
 import { ModalLowStockAlert } from '../modals/ModalLowStockAlert';
+import { ModalItemDiscount } from '../modals/ModalItemDiscount';
 import { playSuccessBeep, playErrorBeep } from '../../utils/audioFeedback';
 import { DigitalClock } from '../common/DigitalClock';
 
 interface KasirFisikViewProps {
   products?: Product[];
+  members?: CustomerMember[];
+  pointSettings?: PointExchangeSettings;
+  activeVouchers?: MemberVoucherClaim[];
   currentRole: UserRole;
   operatorName?: string;
   onOpenNewProduct: (initialBarcode?: string) => void;
@@ -41,13 +50,20 @@ interface KasirFisikViewProps {
     total: number,
     paymentMethod: string,
     customerName?: string,
-    notes?: string
+    notes?: string,
+    memberId?: string,
+    pointsRedeemed?: number,
+    discountFromPoints?: number,
+    voucherClaimId?: string
   ) => void;
   onOpenRestock?: (product: Product) => void;
 }
 
 export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
   products = [],
+  members = [],
+  pointSettings = { minPointsRedeem: 50, pointsPerStep: 50, rupiahPerStep: 5000, enableDirectDiscounts: true },
+  activeVouchers = [],
   currentRole,
   operatorName = 'Kasir',
   onOpenNewProduct,
@@ -61,7 +77,27 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
   const [selectedCat, setSelectedCat] = useState<string>('ALL');
   const [paymentMethod, setPaymentMethod] = useState<string>('Tunai');
   const [customerName, setCustomerName] = useState<string>('');
+  const [selectedMemberId, setSelectedMemberId] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
+
+  // Point & Voucher Redemption State in POS
+  const [pointsToRedeem, setPointsToRedeem] = useState<number>(0);
+  const [selectedVoucherId, setSelectedVoucherId] = useState<string>('');
+
+  const selectedMember = members.find((m) => m.id === selectedMemberId);
+  const memberPoints = selectedMember?.points || 0;
+  const minPoints = pointSettings?.minPointsRedeem ?? 50;
+
+  // Active POS vouchers for selected member
+  const memberAvailableVouchers = activeVouchers.filter(
+    (v) => v.memberId === selectedMemberId && v.status === 'ACTIVE' && (v.category === 'DISCOUNT_POS' || v.category === 'DISCOUNT_TRX')
+  );
+
+  // Reset redemption when member changes
+  useEffect(() => {
+    setPointsToRedeem(0);
+    setSelectedVoucherId('');
+  }, [selectedMemberId]);
 
   // Scanner states
   const [isCameraScannerOpen, setIsCameraScannerOpen] = useState<boolean>(false);
@@ -74,6 +110,10 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
 
   // Low stock alert modal state
   const [isLowStockModalOpen, setIsLowStockModalOpen] = useState<boolean>(false);
+
+  // Per-item discount modal state
+  const [discountingItem, setDiscountingItem] = useState<CartItem | null>(null);
+  const [isDiscountModalOpen, setIsDiscountModalOpen] = useState<boolean>(false);
 
   // Count items below minStock
   const lowStockItems = useMemo(() => {
@@ -342,26 +382,114 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
     setNotes('');
   };
 
-  const cartTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
+  // Calculate discount amount for a single item
+  const getItemDiscountAmount = (item: CartItem): number => {
+    if (!item.discountValue || item.discountValue <= 0) return 0;
+    const gross = item.price * item.qty;
+    if (item.discountType === 'percent') {
+      const rate = Math.min(100, Math.max(0, item.discountValue));
+      return Math.round((gross * rate) / 100);
+    } else {
+      const perUnit = Math.min(item.price, Math.max(0, item.discountValue));
+      return perUnit * item.qty;
+    }
+  };
+
+  const handleApplyDiscount = (
+    itemId: string,
+    discountType: 'percent' | 'nominal',
+    discountValue: number
+  ) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const discountAmount =
+            discountType === 'percent'
+              ? Math.round((item.price * item.qty * Math.min(100, Math.max(0, discountValue))) / 100)
+              : Math.min(item.price, Math.max(0, discountValue)) * item.qty;
+          return {
+            ...item,
+            discountType,
+            discountValue,
+            discountAmount,
+          };
+        }
+        return item;
+      })
+    );
+    playSuccessBeep();
+    showToast(
+      'success',
+      'Diskon Diterapkan',
+      `Diskon ${discountType === 'percent' ? `${discountValue}%` : formatRp(discountValue)} berhasil dipasang.`
+    );
+  };
+
+  const handleRemoveDiscount = (itemId: string) => {
+    setCart((prev) =>
+      prev.map((item) => {
+        if (item.id === itemId) {
+          const { discountType, discountValue, discountAmount, ...rest } = item;
+          return rest as CartItem;
+        }
+        return item;
+      })
+    );
+    showToast('success', 'Diskon Dihapus', 'Potongan diskon pada item telah direset.');
+  };
+
+  const grossTotal = cart.reduce((acc, item) => acc + item.price * item.qty, 0);
+  const totalDiscount = cart.reduce((acc, item) => acc + getItemDiscountAmount(item), 0);
+  const baseCartTotal = Math.max(0, grossTotal - totalDiscount);
+
+  // Calculate discount from points or selected voucher
+  let discountFromPoints = 0;
+  if (selectedVoucherId) {
+    const v = memberAvailableVouchers.find((vch) => vch.id === selectedVoucherId);
+    if (v) {
+      discountFromPoints = Math.min(baseCartTotal, v.discountValue || 5000);
+    }
+  } else if (pointsToRedeem >= minPoints) {
+    const steps = Math.floor(pointsToRedeem / (pointSettings?.pointsPerStep || 50));
+    const calculatedDisc = steps * (pointSettings?.rupiahPerStep || 5000);
+    discountFromPoints = Math.min(baseCartTotal, calculatedDisc);
+  }
+
+  const finalCartTotal = Math.max(0, baseCartTotal - discountFromPoints);
   const cartCost = cart.reduce(
     (acc, item) =>
       acc + (item.buyPrice !== undefined ? item.buyPrice : item.price * 0.8) * item.qty,
     0
   );
-  const cartProfit = cartTotal - cartCost;
-  const profitMarginPct = cartTotal > 0 ? Math.round((cartProfit / cartTotal) * 100) : 0;
+  const cartProfit = finalCartTotal - cartCost;
+  const profitMarginPct = finalCartTotal > 0 ? Math.round((cartProfit / finalCartTotal) * 100) : 0;
   const totalCartQty = cart.reduce((acc, item) => acc + item.qty, 0);
 
   const handleCheckout = () => {
     if (cart.length === 0) return;
+    const cartWithCalculatedDiscounts = cart.map((item) => ({
+      ...item,
+      discountAmount: getItemDiscountAmount(item),
+    }));
+
+    const selectedMember = members.find((m) => m.id === selectedMemberId);
+    const finalCustomerName = selectedMember ? selectedMember.name : customerName.trim() || undefined;
+
     onCheckoutPOS(
-      cart,
-      cartTotal,
+      cartWithCalculatedDiscounts,
+      finalCartTotal,
       paymentMethod,
-      customerName.trim() || undefined,
-      notes.trim() || undefined
+      finalCustomerName,
+      notes.trim() || undefined,
+      selectedMemberId || undefined,
+      pointsToRedeem > 0 ? pointsToRedeem : undefined,
+      discountFromPoints > 0 ? discountFromPoints : undefined,
+      selectedVoucherId || undefined
     );
     clearCart();
+    setSelectedMemberId('');
+    setPointsToRedeem(0);
+    setSelectedVoucherId('');
   };
 
   return (
@@ -653,7 +781,7 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
               </div>
 
             {/* Cart Items List */}
-            <div className="divide-y divide-slate-100 my-2 max-h-56 overflow-y-auto" id="posCartItems">
+            <div className="divide-y divide-slate-100 my-2 max-h-64 overflow-y-auto" id="posCartItems">
               {cart.length === 0 ? (
                 <div className="text-center py-8 text-slate-400 text-xs space-y-1">
                   <ShoppingCart className="w-8 h-8 mx-auto opacity-40 text-slate-400" />
@@ -663,64 +791,300 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
                   </p>
                 </div>
               ) : (
-                cart.map((item) => (
-                  <div key={item.id} className="py-2.5 flex items-center justify-between text-xs gap-2">
-                    <div className="overflow-hidden">
-                      <span className="font-semibold text-slate-900 block truncate">{item.name}</span>
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        {formatRp(item.price)} &times; {item.qty}
-                      </span>
-                    </div>
+                cart.map((item) => {
+                  const itemDisc = getItemDiscountAmount(item);
+                  const originalItemSubtotal = item.price * item.qty;
+                  const finalItemSubtotal = Math.max(0, originalItemSubtotal - itemDisc);
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50">
-                        <button
-                          onClick={() => updateQty(item.id, -1)}
-                          className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-200 rounded-l cursor-pointer"
-                        >
-                          <Minus className="w-3 h-3" />
-                        </button>
-                        <span className="px-2 font-bold text-xs">{item.qty}</span>
-                        <button
-                          onClick={() => updateQty(item.id, 1)}
-                          className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-200 rounded-r cursor-pointer"
-                        >
-                          <Plus className="w-3 h-3" />
-                        </button>
+                  return (
+                    <div key={item.id} className="py-2.5 space-y-1.5 text-xs">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="overflow-hidden flex-1">
+                          <span className="font-semibold text-slate-900 block truncate">{item.name}</span>
+                          <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-400 font-mono mt-0.5">
+                            <span>
+                              {formatRp(item.price)} &times; {item.qty}
+                            </span>
+
+                            {/* Discount Tag / Trigger Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDiscountingItem(item);
+                                setIsDiscountModalOpen(true);
+                              }}
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer transition-colors ${
+                                itemDisc > 0
+                                  ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 border border-emerald-300 shadow-2xs'
+                                  : 'bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 border border-slate-200'
+                              }`}
+                              title="Beri / sesuaikan diskon item ini"
+                            >
+                              <Tag className="w-2.5 h-2.5 text-emerald-600" />
+                              <span>
+                                {itemDisc > 0
+                                  ? item.discountType === 'percent'
+                                    ? `Diskon ${item.discountValue}%`
+                                    : `Diskon -${formatRp(item.discountValue || 0)}`
+                                  : '+ Diskon'}
+                              </span>
+                            </button>
+
+                            {itemDisc > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveDiscount(item.id)}
+                                className="text-slate-400 hover:text-rose-600 p-0.5 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                                title="Hapus Diskon"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          {/* Qty +/- Control */}
+                          <div className="flex items-center border border-slate-200 rounded-lg bg-slate-50">
+                            <button
+                              onClick={() => updateQty(item.id, -1)}
+                              className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-200 rounded-l cursor-pointer"
+                            >
+                              <Minus className="w-3 h-3" />
+                            </button>
+                            <span className="px-2 font-bold text-xs">{item.qty}</span>
+                            <button
+                              onClick={() => updateQty(item.id, 1)}
+                              className="px-1.5 py-0.5 text-slate-600 hover:bg-slate-200 rounded-r cursor-pointer"
+                            >
+                              <Plus className="w-3 h-3" />
+                            </button>
+                          </div>
+
+                          {/* Subtotal with Strikethrough if Discounted */}
+                          <div className="w-20 text-right shrink-0">
+                            {itemDisc > 0 && (
+                              <span className="text-[10px] text-slate-400 line-through block font-mono">
+                                {formatRp(originalItemSubtotal)}
+                              </span>
+                            )}
+                            <span className="font-bold text-slate-900 font-mono text-xs block">
+                              {formatRp(finalItemSubtotal)}
+                            </span>
+                          </div>
+
+                          <button
+                            onClick={() => removeFromCart(item.id)}
+                            className="text-slate-300 hover:text-rose-600 p-1 cursor-pointer"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
-                      <span className="font-bold text-slate-900 w-18 text-right font-mono">
-                        {formatRp(item.price * item.qty)}
-                      </span>
-
-                      <button
-                        onClick={() => removeFromCart(item.id)}
-                        className="text-slate-300 hover:text-rose-600 p-1 cursor-pointer"
-                        title="Hapus"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {/* Applied Discount Highlight Banner per item */}
+                      {itemDisc > 0 && (
+                        <div className="flex items-center justify-between text-[10px] bg-emerald-50/80 px-2 py-0.5 rounded-md border border-emerald-200/70 text-emerald-800">
+                          <span className="flex items-center gap-1 font-medium">
+                            <Tag className="w-2.5 h-2.5 text-emerald-600" />
+                            <span>Potongan Diskon Produk:</span>
+                          </span>
+                          <span className="font-mono font-bold text-emerald-700">
+                            - {formatRp(itemDisc)}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
-            {/* Optional Customer & Payment Method */}
+            {/* Optional Customer, Member & Payment Method */}
             {cart.length > 0 && (
               <div className="space-y-2.5 pt-2 border-t border-slate-100 text-xs">
-                <div>
-                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                    Nama Pelanggan (Opsional)
-                  </label>
-                  <input
-                    type="text"
-                    value={customerName}
-                    onChange={(e) => setCustomerName(e.target.value)}
-                    placeholder="Contoh: Pak Budi / Pelanggan Toko"
-                    className="w-full p-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
-                  />
+                {/* Member Selector */}
+                <div className="bg-gradient-to-br from-amber-500/10 via-blue-50/40 to-transparent p-2.5 rounded-xl border border-amber-300/60 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Member Pelanggan (+1 Poin)</span>
+                    </label>
+                    <span className="text-[10px] bg-amber-400 text-slate-950 font-extrabold px-1.5 py-0.2 rounded font-mono">
+                      REWARD
+                    </span>
+                  </div>
+
+                  <select
+                    value={selectedMemberId}
+                    onChange={(e) => {
+                      setSelectedMemberId(e.target.value);
+                      const m = members.find((mem) => mem.id === e.target.value);
+                      if (m) {
+                        setCustomerName(m.name);
+                      }
+                    }}
+                    className="w-full p-2 border border-amber-300 rounded-lg text-xs bg-white focus:ring-2 focus:ring-amber-500 focus:outline-hidden font-medium"
+                  >
+                    <option value="">-- Bukan Member / Pelanggan Umum --</option>
+                    {members
+                      .filter((m) => m.status === 'ACTIVE')
+                      .map((m) => (
+                        <option key={m.id} value={m.id}>
+                          👑 [{m.tier}] {m.name} ({m.phone}) - {m.points} Poin
+                        </option>
+                      ))}
+                  </select>
+
+                  {selectedMember && (
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center justify-between text-[11px] bg-amber-100/90 px-2.5 py-1 rounded-md text-amber-950 font-medium">
+                        <span className="flex items-center gap-1">
+                          <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                          <span>Member: <strong>{selectedMember.name}</strong></span>
+                        </span>
+                        <span className="font-bold text-amber-900 bg-amber-200/80 px-2 py-0.5 rounded font-mono">
+                          {memberPoints} Poin Tersedia
+                        </span>
+                      </div>
+
+                      {/* Section Penukaran Poin (Minimal 50 Poin) */}
+                      {memberPoints >= minPoints ? (
+                        <div className="bg-white p-2.5 rounded-lg border border-amber-300/80 space-y-2 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-amber-900 flex items-center gap-1">
+                              <Coins className="w-3.5 h-3.5 text-amber-600" />
+                              <span>Tukar Poin Diskon (Min. {minPoints} Poin):</span>
+                            </span>
+                            <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                              Poin Cukup ({memberPoints} Poin)
+                            </span>
+                          </div>
+
+                          {/* Quick Points Redeem Selector */}
+                          <div className="grid grid-cols-3 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPointsToRedeem(0);
+                                setSelectedVoucherId('');
+                              }}
+                              className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                                pointsToRedeem === 0 && !selectedVoucherId
+                                  ? 'bg-slate-800 text-white border-slate-800'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              Tanpa Diskon
+                            </button>
+
+                            {/* 50 Points */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setPointsToRedeem(50);
+                                setSelectedVoucherId('');
+                              }}
+                              className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                                pointsToRedeem === 50
+                                  ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-2xs'
+                                  : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                              }`}
+                            >
+                              50 Poin (-Rp 5k)
+                            </button>
+
+                            {/* 100 Points */}
+                            {memberPoints >= 100 ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPointsToRedeem(100);
+                                  setSelectedVoucherId('');
+                                }}
+                                className={`py-1 px-1.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                                  pointsToRedeem === 100
+                                    ? 'bg-amber-500 text-slate-950 border-amber-600 shadow-2xs'
+                                    : 'bg-amber-50 text-amber-900 border-amber-200 hover:bg-amber-100'
+                                }`}
+                              >
+                                100 Poin (-Rp 10k)
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled
+                                className="py-1 px-1.5 rounded-lg text-[10px] font-medium border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed"
+                              >
+                                100 Poin (Kurang)
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Member's Active Vouchers Option */}
+                          {memberAvailableVouchers.length > 0 && (
+                            <div className="pt-1 border-t border-slate-100">
+                              <label className="text-[10px] font-semibold text-slate-600 block mb-1">
+                                Atau Gunakan Voucher Belanja POS Milik Member:
+                              </label>
+                              <select
+                                value={selectedVoucherId}
+                                onChange={(e) => {
+                                  setSelectedVoucherId(e.target.value);
+                                  if (e.target.value) setPointsToRedeem(0);
+                                }}
+                                className="w-full p-1.5 border border-emerald-300 rounded-lg text-[11px] bg-emerald-50/50 text-emerald-950 focus:ring-1 focus:ring-emerald-500 font-medium"
+                              >
+                                <option value="">-- Pilih Kupon / Voucher Kasir --</option>
+                                {memberAvailableVouchers.map((vch) => (
+                                  <option key={vch.id} value={vch.id}>
+                                    🎟️ {vch.rewardName} ({vch.voucherCode}) - Diskon {formatRp(vch.discountValue)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          {/* Discount Summary Banner */}
+                          {discountFromPoints > 0 && (
+                            <div className="flex items-center justify-between p-1.5 bg-emerald-100/90 rounded-md text-emerald-900 text-[11px] font-bold border border-emerald-300">
+                              <span className="flex items-center gap-1">
+                                <Tag className="w-3.5 h-3.5 text-emerald-700" />
+                                <span>
+                                  {selectedVoucherId ? 'Voucher Diterapkan:' : `Tukar ${pointsToRedeem} Poin:`}
+                                </span>
+                              </span>
+                              <span className="font-mono text-emerald-800">
+                                - {formatRp(discountFromPoints)} (Poin Otomatis Berkurang)
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="p-2 bg-amber-50/70 border border-amber-200 rounded-lg text-[10px] text-amber-800 flex items-center justify-between">
+                          <span>Minimal penukaran poin adalah <strong>{minPoints} Poin</strong>.</span>
+                          <span className="font-semibold text-amber-900">(Kurang {minPoints - memberPoints} Poin lagi)</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
+
+                {!selectedMemberId && (
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                      Nama Pelanggan (Umum)
+                    </label>
+                    <input
+                      type="text"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Contoh: Pak Budi / Pelanggan Toko"
+                      className="w-full p-2 border border-slate-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-600 focus:outline-hidden"
+                    />
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-[11px] font-semibold text-slate-700 mb-1">
@@ -743,13 +1107,38 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
           </div>
 
           <div className="border-t border-slate-100 pt-3 space-y-2.5">
-            {/* Profit preview if items in cart */}
+            {/* Breakdown Subtotal, Total Discount, and Net Total */}
             {cart.length > 0 && (
-              <div className="bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl space-y-1 text-xs">
-                <div className="flex justify-between items-center text-emerald-900">
+              <div className="space-y-1.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200 text-xs">
+                <div className="flex justify-between text-slate-600 text-[11px]">
+                  <span>Subtotal Kotor ({totalCartQty} item):</span>
+                  <span className="font-mono">{formatRp(grossTotal)}</span>
+                </div>
+
+                {totalDiscount > 0 && (
+                  <div className="flex justify-between text-emerald-700 font-bold text-[11px]">
+                    <span className="flex items-center gap-1">
+                      <Tag className="w-3 h-3 text-emerald-600" />
+                      <span>Total Diskon Produk:</span>
+                    </span>
+                    <span className="font-mono">- {formatRp(totalDiscount)}</span>
+                  </div>
+                )}
+
+                {discountFromPoints > 0 && (
+                  <div className="flex justify-between text-amber-700 font-bold text-[11px]">
+                    <span className="flex items-center gap-1">
+                      <Coins className="w-3 h-3 text-amber-600" />
+                      <span>Potongan Poin / Voucher Member:</span>
+                    </span>
+                    <span className="font-mono">- {formatRp(discountFromPoints)}</span>
+                  </div>
+                )}
+
+                <div className="flex justify-between items-center text-emerald-900 pt-1 border-t border-slate-200">
                   <span className="text-[11px] flex items-center gap-1 font-medium">
                     <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-                    Estimasi Laba Penjualan:
+                    Estimasi Laba Bersih:
                   </span>
                   <span className="font-mono font-bold text-emerald-800">
                     +{formatRp(cartProfit)} ({profitMarginPct}%)
@@ -763,9 +1152,16 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
             )}
 
             <div className="flex justify-between items-center font-bold text-sm">
-              <span className="text-slate-700">Total Tagihan POS:</span>
+              <div>
+                <span className="text-slate-700 block">Total Tagihan POS:</span>
+                {(totalDiscount > 0 || discountFromPoints > 0) && (
+                  <span className="text-[10px] text-emerald-700 font-semibold block">
+                    (Hemat {formatRp(totalDiscount + discountFromPoints)})
+                  </span>
+                )}
+              </div>
               <span id="posTotal" className="text-blue-900 text-lg font-mono font-bold">
-                {formatRp(cartTotal)}
+                {formatRp(finalCartTotal)}
               </span>
             </div>
 
@@ -803,6 +1199,22 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
         onAddToCart={(p) => {
           addToCart(p);
           setIsLowStockModalOpen(false);
+        }}
+      />
+
+      {/* Modal Atur Diskon Per-Item */}
+      <ModalItemDiscount
+        isOpen={isDiscountModalOpen}
+        item={discountingItem}
+        onClose={() => {
+          setIsDiscountModalOpen(false);
+          setDiscountingItem(null);
+        }}
+        onApplyDiscount={(itemId, type, val) => {
+          handleApplyDiscount(itemId, type, val);
+        }}
+        onRemoveDiscount={(itemId) => {
+          handleRemoveDiscount(itemId);
         }}
       />
     </section>
