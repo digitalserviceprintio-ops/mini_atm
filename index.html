@@ -1,6 +1,34 @@
 <!doctype html>
 <html lang="id">
   <head>
+    <script>
+      // Tangani dan redam unhandled rejection akibat penutupan WebSocket Vite di sandbox/preview
+      (function() {
+        function isWsError(msg) {
+          return typeof msg === 'string' && (
+            msg.indexOf('WebSocket') !== -1 ||
+            msg.indexOf('websocket') !== -1 ||
+            msg.indexOf('closed without opened') !== -1 ||
+            msg.indexOf('failed to connect to websocket') !== -1
+          );
+        }
+        window.addEventListener('unhandledrejection', function(e) {
+          var reason = e && (e.reason || e);
+          var msg = (reason && (reason.message || String(reason))) || '';
+          if (isWsError(msg)) {
+            e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          }
+        }, true);
+        window.addEventListener('error', function(e) {
+          var msg = (e && (e.message || String(e))) || '';
+          if (isWsError(msg)) {
+            e.preventDefault();
+            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+          }
+        }, true);
+      })();
+    </script>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pencatatan Transaksi Mini ATM</title>

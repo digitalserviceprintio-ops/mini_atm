@@ -48,13 +48,14 @@ import { MemberPelangganView } from './components/views/MemberPelangganView';
 import { KasirFisikView } from './components/views/KasirFisikView';
 import { StokBarangView } from './components/views/StokBarangView';
 import { LaporanPenjualanFisikView } from './components/views/LaporanPenjualanFisikView';
+import { RiwayatTransaksiAgenView } from './components/views/RiwayatTransaksiAgenView';
+import { RiwayatTransaksiPosView } from './components/views/RiwayatTransaksiPosView';
 import { HakAksesView } from './components/views/HakAksesView';
 import { ProfilAgenView } from './components/views/ProfilAgenView';
 import { SettingPrinterView } from './components/views/SettingPrinterView';
 import { DatabaseSpreadsheetView } from './components/views/DatabaseSpreadsheetView';
 import { BackupResetView } from './components/views/BackupResetView';
 import { TentangSistemView } from './components/views/TentangSistemView';
-import { KeamananSistemView } from './components/views/KeamananSistemView';
 import { SecurityAlertBanner } from './components/common/SecurityAlertBanner';
 import { SecurityThreatItem } from './types';
 import { subscribeToThreats, dismissActiveAlert, recordThreat } from './utils/threatDetector';
@@ -1813,7 +1814,6 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onNavigateToSpreadsheet={() => setActiveTab('database-spreadsheet')}
-        onNavigateToSecurity={() => setActiveTab('keamanan-sistem')}
       />
 
       <div className="flex flex-1 relative">
@@ -1825,6 +1825,7 @@ export default function App() {
           onClose={() => setIsSidebarOpen(false)}
           profile={profile}
           trxCount={transactions.length}
+          posSalesCount={posSales.length}
           userCount={users.length}
           memberCount={members.length}
           currentUser={currentUser}
@@ -1838,11 +1839,6 @@ export default function App() {
           <SecurityAlertBanner
             alert={activeThreatAlert}
             onDismiss={dismissActiveAlert}
-            onOpenSecurityCenter={() => {
-              if (currentRole === 'Admin') {
-                setActiveTab('keamanan-sistem');
-              }
-            }}
           />
 
           {/* Strict Role Guard: Check if Kasir attempts to open Admin-only pages */}
@@ -1852,7 +1848,6 @@ export default function App() {
               'arus-kas',
               'akun-kas',
               'hak-akses',
-              'keamanan-sistem',
               'profil-agen',
               'database-spreadsheet',
               'backup-reset',
@@ -1897,6 +1892,31 @@ export default function App() {
                 setIsReceiptModalOpen(true);
               }}
               onConfirmVoid={handleConfirmVoid}
+              onNavigateToHistory={() => setActiveTab('riwayat-transaksi-agen')}
+            />
+          )}
+
+          {activeTab === 'riwayat-transaksi-agen' && (
+            <RiwayatTransaksiAgenView
+              transactions={transactions}
+              accounts={accounts}
+              profile={profile}
+              currentRole={currentRole}
+              operatorName={currentUser?.name || 'Operator'}
+              onOpenNewTrx={() => {
+                setEditingTrx(null);
+                setIsTrxModalOpen(true);
+              }}
+              onEditTrx={(trx) => {
+                setEditingTrx(trx);
+                setIsTrxModalOpen(true);
+              }}
+              onViewReceipt={(trx) => {
+                setReceiptTrx(trx);
+                setIsReceiptModalOpen(true);
+              }}
+              onConfirmVoid={handleConfirmVoid}
+              onNavigateToInputTrx={() => setActiveTab('transaksi')}
             />
           )}
 
@@ -2032,11 +2052,26 @@ export default function App() {
               }}
               onNavigateToStock={() => setActiveTab('stok-barang')}
               onNavigateToReport={() => setActiveTab('laporan-penjualan-fisik')}
+              onNavigateToHistoryPos={() => setActiveTab('riwayat-transaksi-pos')}
               onCheckoutPOS={handleCheckoutPOS}
               onOpenRestock={(p) => {
                 setSelectedRestockProduct(p);
                 setIsRestockModalOpen(true);
               }}
+            />
+          )}
+
+          {activeTab === 'riwayat-transaksi-pos' && (
+            <RiwayatTransaksiPosView
+              posSales={posSales}
+              products={products}
+              accounts={accounts}
+              profile={profile}
+              currentRole={currentRole}
+              operatorName={currentUser?.name || 'Kasir'}
+              onVoidSale={handleVoidPosSale}
+              onReprintReceipt={handleReprintPOS}
+              onNavigateToPOS={() => setActiveTab('kasir-fisik')}
             />
           )}
 
@@ -2151,10 +2186,6 @@ export default function App() {
               onRestoreData={handleRestoreData}
               onOpenResetModal={() => setIsResetModalOpen(true)}
             />
-          )}
-
-          {activeTab === 'keamanan-sistem' && currentRole === 'Admin' && (
-            <KeamananSistemView />
           )}
 
           {activeTab === 'tentang-sistem' && (

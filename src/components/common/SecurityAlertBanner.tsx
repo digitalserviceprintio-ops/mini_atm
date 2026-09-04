@@ -5,7 +5,7 @@ import { SecurityThreatItem } from '../../types';
 interface SecurityAlertBannerProps {
   alert: SecurityThreatItem | null;
   onDismiss: () => void;
-  onOpenSecurityCenter: () => void;
+  onOpenSecurityCenter?: () => void;
 }
 
 export const SecurityAlertBanner: React.FC<SecurityAlertBannerProps> = ({
@@ -70,15 +70,17 @@ export const SecurityAlertBanner: React.FC<SecurityAlertBannerProps> = ({
         </div>
 
         <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
-          <button
-            type="button"
-            onClick={onOpenSecurityCenter}
-            id="btn-view-security-center"
-            className="text-xs font-bold px-3 py-1.5 bg-white text-slate-950 hover:bg-slate-100 rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
-          >
-            <span>Pusat Keamanan</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          {onOpenSecurityCenter && (
+            <button
+              type="button"
+              onClick={onOpenSecurityCenter}
+              id="btn-view-security-center"
+              className="text-xs font-bold px-3 py-1.5 bg-white text-slate-950 hover:bg-slate-100 rounded-lg shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <span>Pusat Keamanan</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
 
           <button
             type="button"

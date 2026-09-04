@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { Account, CashMutation, Product, Transaction, AppUser, AgentProfile } from '../types';
+import { Account, CashMutation, Product, Transaction, AppUser, AgentProfile, PosSale } from '../types';
 import { formatDateTime } from './formatters';
 
 // Helper to auto calculate column widths
@@ -383,3 +383,119 @@ export function exportFullDatabaseToExcel(
   const storeSlug = profile.storeName.replace(/[^a-zA-Z0-9]/g, '_');
   XLSX.writeFile(wb, `Database_Lengkap_${storeSlug}_${dateStr}.xlsx`);
 }
+
+/**
+ * Export POS Cashier Sales Transactions to a professional Excel (.xlsx) file
+ */
+export function exportPosSalesToExcel(
+  sales: PosSale[],
+  accounts: Account[],
+  profile?: AgentProfile,
+  filterLabel?: string
+): void {
+  const accountMap = new Map((accounts || []).map((a) => [a.id, a.name]));
+  const wb = XLSX.utils.book_new();
+
+  const titleRows: (string | number)[][] = [
+    [profile?.storeName || 'KASIR POS RITEL - RIWAYAT PENJUALAN'],
+    [
+      `Dicetak: ${formatDateTime()} | Agen/Outlet: ${profile?.idAgent || '-'} | Filter: ${
+        filterLabel || 'Semua Riwayat Transaksi POS'
+      }`,
+    ],
+    [], // empty line
+  ];
+
+  const headerRow = [
+    'No',
+    'No. Invoice / Struk',
+    'Waktu Transaksi',
+    'Kasir Operator',
+    'Nama Pelanggan',
+    'No. Member',
+    'Rincian Produk Terjual',
+    'Total Qty (Pcs)',
+    'Subtotal (Rp)',
+    'Total Diskon (Rp)',
+    'Diskon Poin (Rp)',
+    'Total Bayar / Omset (Rp)',
+    'Total Modal Pokok (Rp)',
+    'Laba Kotor (Rp)',
+    'Metode Pembayaran',
+    'Akun Penampung',
+    'Status',
+    'Catatan',
+  ];
+
+  let totalRevenue = 0;
+  let totalCost = 0;
+  let totalProfit = 0;
+  let totalQty = 0;
+
+  const dataRows = (sales || []).map((sale, idx) => {
+    const isVoid = sale.status === 'VOID';
+    const itemsSummary = (sale.items || [])
+      .map((it) => `${it.productName} (${it.qty}x @Rp ${it.price.toLocaleString('id-ID')})`)
+      .join('; ');
+
+    if (!isVoid) {
+      totalRevenue += sale.totalRevenue || 0;
+      totalCost += sale.totalCost || 0;
+      totalProfit += sale.grossProfit || 0;
+      totalQty += sale.totalQty || 0;
+    }
+
+    return [
+      idx + 1,
+      sale.invoiceNumber || sale.id,
+      sale.time,
+      sale.cashierName || 'Kasir',
+      sale.customerName || 'Pelanggan Umum',
+      sale.memberNumber || '-',
+      itemsSummary,
+      sale.totalQty || 0,
+      sale.totalBeforeDiscount || sale.totalRevenue,
+      sale.totalDiscount || 0,
+      sale.discountFromPoints || 0,
+      sale.totalRevenue,
+      sale.totalCost || 0,
+      isVoid ? 0 : sale.grossProfit || 0,
+      sale.paymentMethod || 'Tunai',
+      accountMap.get(sale.accountId) || sale.accountId || '-',
+      isVoid ? 'VOID (Dibatalkan)' : 'SUKSES',
+      sale.notes || '-',
+    ];
+  });
+
+  const summaryRow = [
+    'TOTAL REKAPITULASI (SUKSES)',
+    '',
+    '',
+    '',
+    '',
+    '',
+    '',
+    totalQty,
+    '',
+    '',
+    '',
+    totalRevenue,
+    totalCost,
+    totalProfit,
+    '',
+    '',
+    '',
+    '',
+  ];
+
+  const allRows = [...titleRows, headerRow, ...dataRows, [], summaryRow];
+  const ws = XLSX.utils.aoa_to_sheet(allRows);
+  ws['!cols'] = calculateColWidths(allRows);
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Riwayat Transaksi POS');
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const storeSlug = (profile?.storeName || 'Toko').replace(/[^a-zA-Z0-9]/g, '_');
+  XLSX.writeFile(wb, `Riwayat_Transaksi_POS_${storeSlug}_${dateStr}.xlsx`);
+}
+

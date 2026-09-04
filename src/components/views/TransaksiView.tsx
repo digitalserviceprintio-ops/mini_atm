@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Filter,
+  History,
 } from 'lucide-react';
 import { Account, Transaction, TransactionType, UserRole } from '../../types';
 import { formatRp } from '../../utils/formatters';
@@ -22,6 +23,7 @@ interface TransaksiViewProps {
   onEditTrx: (trx: Transaction) => void;
   onViewReceipt: (trx: Transaction) => void;
   onConfirmVoid: (trx: Transaction) => void;
+  onNavigateToHistory?: () => void;
 }
 
 export const TransaksiView: React.FC<TransaksiViewProps> = ({
@@ -32,6 +34,7 @@ export const TransaksiView: React.FC<TransaksiViewProps> = ({
   onEditTrx,
   onViewReceipt,
   onConfirmVoid,
+  onNavigateToHistory,
 }) => {
   const [activeCategory, setActiveCategory] = useState<string>('SEMUA');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -120,13 +123,26 @@ export const TransaksiView: React.FC<TransaksiViewProps> = ({
           </div>
         </div>
 
-        <button
-          onClick={onOpenNewTrx}
-          className="bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Transaksi Baru</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onNavigateToHistory && (
+            <button
+              onClick={onNavigateToHistory}
+              className="bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-300 font-semibold text-xs px-3.5 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              title="Buka menu riwayat transaksi agen lengkap"
+            >
+              <History className="w-4 h-4 text-cyan-700" />
+              <span>Riwayat Transaksi</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenNewTrx}
+            className="bg-blue-700 hover:bg-blue-800 text-white font-semibold text-xs px-4 py-2.5 rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all cursor-pointer"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Transaksi Baru</span>
+          </button>
+        </div>
       </div>
 
       {/* Dynamic Category Summary Cards */}

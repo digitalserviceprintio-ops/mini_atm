@@ -28,6 +28,7 @@ import {
   UserCheck,
   Banknote,
   AlertCircle,
+  Receipt,
 } from 'lucide-react';
 import { CartItem, CustomerMember, MemberVoucherClaim, PointExchangeSettings, Product, UserRole } from '../../types';
 import { formatRp } from '../../utils/formatters';
@@ -47,6 +48,7 @@ interface KasirFisikViewProps {
   onOpenNewProduct: (initialBarcode?: string) => void;
   onNavigateToStock: () => void;
   onNavigateToReport: () => void;
+  onNavigateToHistoryPos?: () => void;
   onCheckoutPOS: (
     cart: CartItem[],
     total: number,
@@ -73,6 +75,7 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
   onOpenNewProduct,
   onNavigateToStock,
   onNavigateToReport,
+  onNavigateToHistoryPos,
   onCheckoutPOS,
   onOpenRestock,
 }) => {
@@ -581,6 +584,17 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
             <Package className="w-4 h-4 text-blue-600" />
             <span>Manajemen Stok</span>
           </button>
+
+          {onNavigateToHistoryPos && (
+            <button
+              onClick={onNavigateToHistoryPos}
+              className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 text-xs font-semibold rounded-xl flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+              title="Buka menu riwayat transaksi & struk kasir POS"
+            >
+              <Receipt className="w-4 h-4 text-emerald-700" />
+              <span>Riwayat Struk POS</span>
+            </button>
+          )}
 
           <button
             onClick={onNavigateToReport}

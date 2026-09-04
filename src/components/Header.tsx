@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Database,
-  Lock,
 } from 'lucide-react';
 import { AgentProfile, UserRole } from '../types';
 import { AuthUser } from './views/LoginView';
@@ -28,7 +27,6 @@ interface HeaderProps {
   currentUser?: AuthUser | null;
   onLogout?: () => void;
   onNavigateToSpreadsheet?: () => void;
-  onNavigateToSecurity?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -41,7 +39,6 @@ export const Header: React.FC<HeaderProps> = ({
   currentUser,
   onLogout,
   onNavigateToSpreadsheet,
-  onNavigateToSecurity,
 }) => {
   const [syncState, setSyncState] = useState<SyncState>({
     status: 'unconfigured',
@@ -201,18 +198,6 @@ export const Header: React.FC<HeaderProps> = ({
               ? 'Sync Error'
               : 'Hubungkan Sheets'}
           </span>
-        </button>
-
-        {/* Security TLS & AES-256 Protocol Indicator */}
-        <button
-          onClick={isUserAdmin ? onNavigateToSecurity : undefined}
-          title="Proteksi Keamanan: TLS/SSL (HTTPS) 256-bit, AES-256-GCM, Zero IP Exposure, WAF Anti-Retas"
-          className={`text-xs px-2.5 py-1.5 rounded-lg border font-medium flex items-center gap-1.5 transition-all ${
-            isUserAdmin ? 'cursor-pointer hover:bg-emerald-50 hover:border-emerald-300' : 'cursor-default'
-          } bg-slate-50 border-slate-200 text-slate-700`}
-        >
-          <Lock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-          <span className="hidden lg:inline text-[11px] font-mono font-bold text-slate-800">TLS &amp; AES-256</span>
         </button>
 
         {/* Quick New Trx Action */}

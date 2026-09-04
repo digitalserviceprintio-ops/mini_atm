@@ -297,6 +297,8 @@ export interface AppUser {
 
 export type ActiveTab =
   | 'transaksi'
+  | 'riwayat-transaksi-agen'
+  | 'riwayat-transaksi-pos'
   | 'laporan-detail'
   | 'laporan-penjualan-fisik'
   | 'stok-barang'
@@ -306,7 +308,6 @@ export type ActiveTab =
   | 'kasir-fisik'
   | 'member-pelanggan'
   | 'hak-akses'
-  | 'keamanan-sistem'
   | 'profil-agen'
   | 'setting-printer'
   | 'database-spreadsheet'

@@ -24,6 +24,8 @@ import {
   Sparkles,
   Info,
   BookOpen,
+  History,
+  Receipt,
 } from 'lucide-react';
 import { ActiveTab, AgentProfile, UserRole } from '../types';
 import { AuthUser } from './views/LoginView';
@@ -37,6 +39,7 @@ interface SidebarProps {
   onClose: () => void;
   profile: AgentProfile;
   trxCount: number;
+  posSalesCount?: number;
   userCount?: number;
   memberCount?: number;
   currentUser?: AuthUser | null;
@@ -51,6 +54,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onClose,
   profile,
   trxCount,
+  posSalesCount = 0,
   userCount = 0,
   memberCount = 0,
   currentUser,
@@ -174,8 +178,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }`}
               >
                 <ListOrdered className="w-4 h-4 text-blue-300" />
-                <span className="flex-1">Daftar Transaksi Agen</span>
+                <span className="flex-1">Pencatatan Transaksi Agen</span>
                 <span className="bg-blue-900/90 text-blue-200 px-1.5 py-0.5 rounded text-[10px] font-bold">
+                  {trxCount}
+                </span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('riwayat-transaksi-agen')}
+                id="nav-riwayat-transaksi-agen"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'riwayat-transaksi-agen'
+                    ? 'bg-cyan-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <History className="w-4 h-4 text-cyan-300" />
+                <span className="flex-1">Riwayat Transaksi Agen</span>
+                <span className="bg-cyan-500/20 text-cyan-200 text-[9px] font-bold px-1.5 py-0.5 rounded border border-cyan-400/30">
                   {trxCount}
                 </span>
               </button>
@@ -191,6 +211,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               >
                 <ShoppingCart className="w-4 h-4 text-blue-300" />
                 <span className="flex-1">Kasir POS (Jual Barang)</span>
+              </button>
+
+              <button
+                onClick={() => handleSelectTab('riwayat-transaksi-pos')}
+                id="nav-riwayat-transaksi-pos"
+                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                  activeTab === 'riwayat-transaksi-pos'
+                    ? 'bg-emerald-600 text-white font-semibold shadow-xs'
+                    : 'text-blue-100 hover:bg-blue-700/60'
+                }`}
+              >
+                <Receipt className="w-4 h-4 text-emerald-300" />
+                <span className="flex-1">Riwayat Transaksi Kasir POS</span>
+                <span className="bg-emerald-500/20 text-emerald-200 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-400/30">
+                  {posSalesCount}
+                </span>
               </button>
 
               <button
@@ -338,22 +374,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {userCount}
                     </span>
                   )}
-                </button>
-
-                <button
-                  onClick={() => handleSelectTab('keamanan-sistem')}
-                  id="nav-keamanan-sistem"
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
-                    activeTab === 'keamanan-sistem'
-                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
-                      : 'text-blue-100 hover:bg-blue-700/60'
-                  }`}
-                >
-                  <ShieldCheck className="w-4 h-4 text-emerald-300" />
-                  <span className="flex-1">Pusat Keamanan & Enkripsi</span>
-                  <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
-                    AES-256
-                  </span>
                 </button>
 
                 <button
