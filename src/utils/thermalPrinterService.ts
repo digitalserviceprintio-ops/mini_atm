@@ -1,4 +1,4 @@
-import { AgentProfile, PrinterSettings, Transaction } from '../types';
+import { AgentProfile, PosSale, PrinterSettings, Transaction } from '../types';
 import { formatRp } from './formatters';
 
 // Web Bluetooth API Interfaces
@@ -287,19 +287,32 @@ export function generateThermalReceiptHtml(
   trx: Transaction,
   profile: AgentProfile,
   settings: PrinterSettings,
-  copyLabel?: string
+  copyLabel?: string,
+  posSale?: PosSale | null
 ): string {
-  const totalPay = trx.nominal + trx.feeCust;
-  const isVoid = trx.status === 'VOID';
+  const isPosRetail = Boolean(posSale && posSale.items && posSale.items.length > 0);
+  const totalPay = isPosRetail ? posSale!.totalRevenue : (trx.nominal + trx.feeCust);
+  const isVoid = trx.status === 'VOID' || (posSale ? posSale.status === 'VOID' : false);
   const maxWidth = settings.paperWidth === '58mm' ? '56mm' : '78mm';
   const fontSize = settings.paperWidth === '58mm' ? '11px' : '12px';
   const densityClass = settings.printerDensity === 'dark' ? 'font-bold' : '';
+
+  const cash = isPosRetail
+    ? (posSale?.cashReceived ?? totalPay)
+    : (trx.cashReceived ?? totalPay);
+  const change = isPosRetail
+    ? (posSale?.changeAmount ?? (cash > totalPay ? cash - totalPay : 0))
+    : (trx.changeAmount ?? 0);
+
+  const receiptNumber = isPosRetail ? (posSale!.invoiceNumber || posSale!.id) : `#${trx.id}`;
+  const cashier = isPosRetail ? (posSale!.cashierName || 'Kasir 01') : (profile.idAgent || 'Operator');
+  const customer = isPosRetail ? (posSale!.customerName || 'Pelanggan Umum') : trx.cust;
 
   return `<!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8">
-  <title>Struk_${trx.id}</title>
+  <title>Struk_${receiptNumber}</title>
   <style>
     @page {
       size: ${settings.paperWidth} auto;
@@ -439,7 +452,7 @@ export function generateThermalReceiptHtml(
     </div>
   ` : ''}
 
-  <div class="store-name">${profile.storeName || 'MINI ATM AGENT'}</div>
+  <div class="store-name">${profile.storeName || 'TOKO RITEL & POS'}</div>
   ${profile.receiptHeader ? `<div class="store-sub">${profile.receiptHeader}</div>` : ''}
   ${profile.address ? `<div class="store-address">${profile.address}</div>` : ''}
   <div class="store-sub">Telp/WA: ${profile.phone || '-'}</div>
@@ -449,53 +462,97 @@ export function generateThermalReceiptHtml(
   <div class="divider"></div>
 
   <div class="row">
-    <span class="row-label">Tgl/Waktu:</span>
-    <span class="row-value">${trx.time}</span>
+    <span class="row-label">No. Struk:</span>
+    <span class="row-value font-bold">${receiptNumber}</span>
   </div>
   <div class="row">
-    <span class="row-label">No. Trx:</span>
-    <span class="row-value font-bold">#${trx.id}</span>
+    <span class="row-label">Tanggal:</span>
+    <span class="row-value">${isPosRetail ? posSale!.time : trx.time}</span>
   </div>
-
-  ${settings.showIdAgent ? `
   <div class="row">
-    <span class="row-label">ID Agen:</span>
-    <span class="row-value">${profile.idAgent || 'BRI-9821-4402'}</span>
-  </div>` : ''}
-
-  ${settings.showRefNumber && trx.refNumber ? `
+    <span class="row-label">Kasir:</span>
+    <span class="row-value">${cashier}</span>
+  </div>
   <div class="row">
-    <span class="row-label">No. Ref:</span>
-    <span class="row-value font-bold">${trx.refNumber}</span>
+    <span class="row-label">Pelanggan:</span>
+    <span class="row-value">${customer}</span>
+  </div>
+  ${isPosRetail && posSale?.memberNumber ? `
+  <div class="row">
+    <span class="row-label">No. Member:</span>
+    <span class="row-value font-bold">${posSale.memberNumber}</span>
   </div>` : ''}
 
   <div class="divider"></div>
 
-  ${isVoid ? '<div class="void-badge">*** TRANSAKSI BATAL (VOID) ***</div>' : ''}
+  ${isVoid ? '<div class="void-badge">*** TRANSAKSI DIBATALKAN (VOID) ***</div>' : ''}
 
-  <div class="row">
-    <span class="row-label">Layanan:</span>
-    <span class="row-value font-bold">${trx.type}</span>
-  </div>
-  <div class="row">
-    <span class="row-label">Pengirim:</span>
-    <span class="row-value">${trx.cust}</span>
-  </div>
-  <div class="row">
-    <span class="row-label">Tujuan/Rek:</span>
-    <span class="row-value">${trx.target}</span>
-  </div>
+  ${isPosRetail ? `
+    <!-- DAFTAR ITEM BARANG RITEL -->
+    ${posSale!.items.map((it) => `
+      <div style="margin-bottom: 4px;">
+        <div style="font-weight: bold; text-align: left; font-size: ${fontSize}; word-break: break-word;">${it.productName.toUpperCase()}</div>
+        <div style="display: flex; justify-content: space-between; font-size: ${fontSize};">
+          <span>${it.qty} ${it.unit || 'PCS'} x ${formatRp(it.price)}</span>
+          <span style="font-weight: bold;">${formatRp(it.subtotal)}</span>
+        </div>
+        ${it.discountAmount && it.discountAmount > 0 ? `
+          <div style="font-size: 9.5px; padding-left: 6px;">  (Diskon Item: -${formatRp(it.discountAmount)})</div>
+        ` : ''}
+      </div>
+    `).join('')}
 
-  <div class="divider"></div>
+    <div class="divider"></div>
 
-  <div class="row">
-    <span class="row-label">Nominal:</span>
-    <span class="row-value font-bold">${formatRp(trx.nominal)}</span>
-  </div>
-  <div class="row">
-    <span class="row-label">Biaya Admin:</span>
-    <span class="row-value">${formatRp(trx.feeCust)}</span>
-  </div>
+    <div class="row">
+      <span class="row-label">Total Item:</span>
+      <span class="row-value">${posSale!.items.length} Item (${posSale!.totalQty} Qty)</span>
+    </div>
+    <div class="row">
+      <span class="row-label">Subtotal:</span>
+      <span class="row-value">${formatRp(posSale!.totalBeforeDiscount || posSale!.totalRevenue)}</span>
+    </div>
+    ${(posSale!.totalDiscount || 0) > 0 ? `
+    <div class="row">
+      <span class="row-label">Total Diskon:</span>
+      <span class="row-value font-bold">-${formatRp(posSale!.totalDiscount || 0)}</span>
+    </div>` : ''}
+    ${posSale!.discountFromPoints && posSale!.discountFromPoints > 0 ? `
+    <div class="row">
+      <span class="row-label">Diskon Poin:</span>
+      <span class="row-value font-bold">-${formatRp(posSale!.discountFromPoints)}</span>
+    </div>` : ''}
+  ` : `
+    <!-- LAYANAN PERBANKAN / MINI ATM -->
+    <div class="row">
+      <span class="row-label">Layanan:</span>
+      <span class="row-value font-bold">${trx.type}</span>
+    </div>
+    <div class="row">
+      <span class="row-label">Pengirim:</span>
+      <span class="row-value">${trx.cust}</span>
+    </div>
+    <div class="row">
+      <span class="row-label">Tujuan/Rek:</span>
+      <span class="row-value">${trx.target}</span>
+    </div>
+    ${settings.showRefNumber && trx.refNumber ? `
+    <div class="row">
+      <span class="row-label">No. Ref:</span>
+      <span class="row-value font-bold">${trx.refNumber}</span>
+    </div>` : ''}
+
+    <div class="divider"></div>
+
+    <div class="row">
+      <span class="row-label">Nominal:</span>
+      <span class="row-value font-bold">${formatRp(trx.nominal)}</span>
+    </div>
+    <div class="row">
+      <span class="row-label">Biaya Admin:</span>
+      <span class="row-value">${formatRp(trx.feeCust)}</span>
+    </div>
+  `}
 
   <div class="divider-double"></div>
 
@@ -507,19 +564,36 @@ export function generateThermalReceiptHtml(
   <div class="divider"></div>
 
   <div class="row">
-    <span class="row-label">Status:</span>
-    <span class="row-value font-bold">${isVoid ? 'VOID / BATAL' : 'BERHASIL / SUKSES'}</span>
+    <span class="row-label">Bayar (${isPosRetail ? (posSale!.paymentMethod || 'Tunai') : 'Tunai'}):</span>
+    <span class="row-value font-bold">${formatRp(cash)}</span>
+  </div>
+  <div class="row" style="font-weight: bold;">
+    <span class="row-label">Kembalian:</span>
+    <span class="row-value">${formatRp(change)}</span>
   </div>
 
-  ${settings.showNotes && trx.notes ? `
-  <div class="row" style="margin-top: 3px;">
-    <span class="row-label">Catatan:</span>
-    <span class="row-value" style="font-size: 9px;">${trx.notes}</span>
+  ${isPosRetail && posSale?.pointsEarned ? `
+  <div class="divider"></div>
+  <div class="row">
+    <span class="row-label">Poin Didapat:</span>
+    <span class="row-value font-bold">+${posSale.pointsEarned} Poin</span>
   </div>` : ''}
 
-  ${settings.showFooter ? `
   <div class="divider"></div>
-  <div class="footer-note">${profile.receiptFooter || settings.customFooterNote}</div>` : ''}
+
+  <div style="text-align: center; margin: 8px 0 4px;">
+    <div style="font-family: monospace; font-size: 13px; letter-spacing: 3px; font-weight: 900;">|||| | ||||| || |||||| |||| |</div>
+    <div style="font-size: 9px; letter-spacing: 1px; margin-top: 2px;">* ${receiptNumber} *</div>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="footer-note">
+    *** TERIMA KASIH TELAH BERBELANJA ***<br/>
+    BARANG YANG SUDAH DIBELI TIDAK DAPAT DITUKAR / DIKEMBALIKAN KECUALI DENGAN PERJANJIAN<br/>
+    SMS/WA LAYANAN: ${profile.phone || '-'}<br/>
+    ${profile.receiptFooter || settings.customFooterNote || 'Simpan struk ini sebagai bukti pembayaran yang sah.'}
+  </div>
 </body>
 </html>`;
 }
@@ -530,7 +604,8 @@ export function generateThermalReceiptHtml(
 export function printReceiptViaBrowser(
   trx: Transaction,
   profile: AgentProfile,
-  settings: PrinterSettings
+  settings: PrinterSettings,
+  posSale?: PosSale | null
 ): Promise<{ success: boolean; message: string }> {
   return new Promise((resolve) => {
     try {
@@ -538,10 +613,10 @@ export function printReceiptViaBrowser(
       let combinedHtml = '';
 
       if (copiesCount === 1) {
-        combinedHtml = generateThermalReceiptHtml(trx, profile, settings);
+        combinedHtml = generateThermalReceiptHtml(trx, profile, settings, undefined, posSale);
       } else {
-        const copy1 = generateThermalReceiptHtml(trx, profile, settings, 'LEMBAR NASABAH');
-        const copy2 = generateThermalReceiptHtml(trx, profile, settings, 'LEMBAR ARSIP OUTLET');
+        const copy1 = generateThermalReceiptHtml(trx, profile, settings, 'LEMBAR PELANGGAN', posSale);
+        const copy2 = generateThermalReceiptHtml(trx, profile, settings, 'LEMBAR TOKO / ARSIP', posSale);
         combinedHtml = `${copy1}<div style="page-break-before: always; margin-top: 15px;"></div>${copy2}`;
       }
 
@@ -616,8 +691,10 @@ export function generateEscPosBytes(
   trx: Transaction,
   profile: AgentProfile,
   settings: PrinterSettings,
-  copyLabel?: string
+  copyLabel?: string,
+  posSale?: PosSale | null
 ): Uint8Array {
+  const isPosRetail = Boolean(posSale && posSale.items && posSale.items.length > 0);
   const encoder = new TextEncoder();
   const bytes: number[] = [];
 
@@ -629,7 +706,7 @@ export function generateEscPosBytes(
 
   // Double Height & Width for Store Name: GS ! 0x11
   bytes.push(0x1D, 0x21, 0x11);
-  bytes.push(...encoder.encode(`${profile.storeName || 'MINI ATM AGENT'}\n`));
+  bytes.push(...encoder.encode(`${profile.storeName || (isPosRetail ? 'TOKO RITEL & POS' : 'MINI ATM AGENT')}\n`));
 
   // Normal Font: GS ! 0x00
   bytes.push(0x1D, 0x21, 0x00);
@@ -648,56 +725,102 @@ export function generateEscPosBytes(
 
   // Separator Line
   const lineSeparator = settings.paperWidth === '58mm' ? '--------------------------------\n' : '------------------------------------------------\n';
+  const doubleLine = settings.paperWidth === '58mm' ? '================================\n' : '================================================\n';
   bytes.push(...encoder.encode(lineSeparator));
 
   // Left Align: ESC a 0
   bytes.push(0x1B, 0x61, 0x00);
 
-  bytes.push(...encoder.encode(`Waktu    : ${trx.time}\n`));
-  bytes.push(...encoder.encode(`No. Trx  : #${trx.id}\n`));
-  if (settings.showIdAgent) {
-    bytes.push(...encoder.encode(`ID Agen  : ${profile.idAgent || 'BRI-9821'}\n`));
+  const receiptNumber = isPosRetail ? (posSale!.invoiceNumber || posSale!.id) : `#${trx.id}`;
+  const cashier = isPosRetail ? (posSale!.cashierName || 'Kasir 01') : (profile.idAgent || 'Operator');
+  const customer = isPosRetail ? (posSale!.customerName || 'Pelanggan Umum') : trx.cust;
+
+  bytes.push(...encoder.encode(`No. Struk: ${receiptNumber}\n`));
+  bytes.push(...encoder.encode(`Tanggal  : ${isPosRetail ? posSale!.time : trx.time}\n`));
+  bytes.push(...encoder.encode(`Kasir    : ${cashier}\n`));
+  bytes.push(...encoder.encode(`Pelanggan: ${customer}\n`));
+
+  if (isPosRetail && posSale?.memberNumber) {
+    bytes.push(...encoder.encode(`No. Mbr  : ${posSale.memberNumber}\n`));
   }
-  if (settings.showRefNumber && trx.refNumber) {
+  if (!isPosRetail && settings.showRefNumber && trx.refNumber) {
     bytes.push(...encoder.encode(`No. Ref  : ${trx.refNumber}\n`));
   }
 
   bytes.push(...encoder.encode(lineSeparator));
 
-  if (trx.status === 'VOID') {
+  if (trx.status === 'VOID' || (posSale && posSale.status === 'VOID')) {
     bytes.push(0x1B, 0x61, 0x01);
     bytes.push(...encoder.encode(`*** TRANSAKSI DIBATALKAN (VOID) ***\n`));
     bytes.push(0x1B, 0x61, 0x00);
   }
 
-  bytes.push(...encoder.encode(`Layanan  : ${trx.type}\n`));
-  bytes.push(...encoder.encode(`Pengirim : ${trx.cust}\n`));
-  bytes.push(...encoder.encode(`Tujuan   : ${trx.target}\n`));
+  if (isPosRetail) {
+    // Print item rows
+    posSale!.items.forEach((it) => {
+      bytes.push(...encoder.encode(`${it.productName.toUpperCase()}\n`));
+      const detailStr = `  ${it.qty} ${it.unit || 'PCS'} x ${formatRp(it.price)}`;
+      const subStr = formatRp(it.subtotal);
+      const spaceCount = Math.max(1, (settings.paperWidth === '58mm' ? 32 : 48) - detailStr.length - subStr.length);
+      bytes.push(...encoder.encode(`${detailStr}${' '.repeat(spaceCount)}${subStr}\n`));
+      if (it.discountAmount && it.discountAmount > 0) {
+        bytes.push(...encoder.encode(`  (Diskon: -${formatRp(it.discountAmount)})\n`));
+      }
+    });
 
-  bytes.push(...encoder.encode(lineSeparator));
+    bytes.push(...encoder.encode(lineSeparator));
+    bytes.push(...encoder.encode(`Total Item: ${posSale!.items.length} Item (${posSale!.totalQty} Qty)\n`));
+    bytes.push(...encoder.encode(`Subtotal  : ${formatRp(posSale!.totalBeforeDiscount || posSale!.totalRevenue)}\n`));
+    if ((posSale!.totalDiscount || 0) > 0) {
+      bytes.push(...encoder.encode(`Diskon    : -${formatRp(posSale!.totalDiscount || 0)}\n`));
+    }
+    if (posSale!.discountFromPoints && posSale!.discountFromPoints > 0) {
+      bytes.push(...encoder.encode(`Disc Poin : -${formatRp(posSale!.discountFromPoints)}\n`));
+    }
+  } else {
+    bytes.push(...encoder.encode(`Layanan  : ${trx.type}\n`));
+    bytes.push(...encoder.encode(`Pengirim : ${trx.cust}\n`));
+    bytes.push(...encoder.encode(`Tujuan   : ${trx.target}\n`));
+    bytes.push(...encoder.encode(lineSeparator));
+    bytes.push(...encoder.encode(`Nominal  : ${formatRp(trx.nominal)}\n`));
+    bytes.push(...encoder.encode(`Biaya Adm: ${formatRp(trx.feeCust)}\n`));
+  }
 
-  bytes.push(...encoder.encode(`Nominal  : ${formatRp(trx.nominal)}\n`));
-  bytes.push(...encoder.encode(`Biaya Adm: ${formatRp(trx.feeCust)}\n`));
-
-  const doubleLine = settings.paperWidth === '58mm' ? '================================\n' : '================================================\n';
   bytes.push(...encoder.encode(doubleLine));
+
+  const totalPay = isPosRetail ? posSale!.totalRevenue : (trx.nominal + trx.feeCust);
+  const cash = isPosRetail ? (posSale?.cashReceived ?? totalPay) : (trx.cashReceived ?? totalPay);
+  const change = isPosRetail ? (posSale?.changeAmount ?? (cash > totalPay ? cash - totalPay : 0)) : (trx.changeAmount ?? 0);
 
   // Bold Total: ESC E 1
   bytes.push(0x1B, 0x45, 0x01);
-  bytes.push(...encoder.encode(`TOTAL    : ${formatRp(trx.nominal + trx.feeCust)}\n`));
+  bytes.push(...encoder.encode(`TOTAL    : ${formatRp(totalPay)}\n`));
   bytes.push(0x1B, 0x45, 0x00);
 
   bytes.push(...encoder.encode(lineSeparator));
-  bytes.push(...encoder.encode(`Status   : ${trx.status === 'VOID' ? 'VOID/BATAL' : 'BERHASIL/SUKSES'}\n`));
+  bytes.push(...encoder.encode(`Bayar    : ${formatRp(cash)}\n`));
+  bytes.push(...encoder.encode(`Kembali  : ${formatRp(change)}\n`));
 
-  if (settings.showNotes && trx.notes) {
-    bytes.push(...encoder.encode(`Catatan  : ${trx.notes}\n`));
+  if (isPosRetail && posSale?.pointsEarned) {
+    bytes.push(...encoder.encode(`Poin Baru: +${posSale.pointsEarned} Poin\n`));
   }
+
+  bytes.push(...encoder.encode(lineSeparator));
+  // Barcode text
+  bytes.push(0x1B, 0x61, 0x01);
+  bytes.push(...encoder.encode(`|||| | ||||| || |||||| ||||\n`));
+  bytes.push(...encoder.encode(`* ${receiptNumber} *\n`));
+  bytes.push(0x1B, 0x61, 0x00);
 
   if (settings.showFooter) {
     bytes.push(...encoder.encode(lineSeparator));
     bytes.push(0x1B, 0x61, 0x01);
-    bytes.push(...encoder.encode(`${profile.receiptFooter || settings.customFooterNote}\n`));
+    bytes.push(...encoder.encode(`*** TERIMA KASIH TELAH BERBELANJA ***\n`));
+    bytes.push(...encoder.encode(`Barang yg dibeli tdk dpt ditukar/dikembalikan\n`));
+    bytes.push(...encoder.encode(`SMS/WA: ${profile.phone || '-'}\n`));
+    if (profile.receiptFooter || settings.customFooterNote) {
+      bytes.push(...encoder.encode(`${profile.receiptFooter || settings.customFooterNote}\n`));
+    }
   }
 
   // Feed lines
@@ -716,12 +839,13 @@ export function generateEscPosBytes(
 export async function printReceiptViaBluetooth(
   trx: Transaction,
   profile: AgentProfile,
-  settings: PrinterSettings
+  settings: PrinterSettings,
+  posSale?: PosSale | null
 ): Promise<{ success: boolean; message: string }> {
   if (!activeBluetoothCharacteristic) {
     const connectResult = await connectBluetoothPrinter();
     if (!connectResult.success || !activeBluetoothCharacteristic) {
-      await printReceiptViaBrowser(trx, profile, settings);
+      await printReceiptViaBrowser(trx, profile, settings, posSale);
       return {
         success: false,
         message: `${connectResult.error || 'Printer Bluetooth belum terhubung'}. Dialihkan ke dialog cetak sistem.`,
@@ -733,8 +857,8 @@ export async function printReceiptViaBluetooth(
     const copies = settings.printCopies || 1;
 
     for (let c = 0; c < copies; c++) {
-      const copyLabel = copies > 1 ? (c === 0 ? 'LEMBAR NASABAH' : 'LEMBAR ARSIP OUTLET') : undefined;
-      const data = generateEscPosBytes(trx, profile, settings, copyLabel);
+      const copyLabel = copies > 1 ? (c === 0 ? 'LEMBAR PELANGGAN' : 'LEMBAR TOKO / ARSIP') : undefined;
+      const data = generateEscPosBytes(trx, profile, settings, copyLabel, posSale);
 
       const chunkSize = 80;
       for (let i = 0; i < data.length; i += chunkSize) {
@@ -756,7 +880,7 @@ export async function printReceiptViaBluetooth(
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.warn('Bluetooth write error:', errorMsg);
-    await printReceiptViaBrowser(trx, profile, settings);
+    await printReceiptViaBrowser(trx, profile, settings, posSale);
     return {
       success: false,
       message: `Gagal Bluetooth: ${errorMsg}. Dialihkan ke dialog cetak sistem.`,
@@ -770,12 +894,13 @@ export async function printReceiptViaBluetooth(
 export async function printReceiptViaSerial(
   trx: Transaction,
   profile: AgentProfile,
-  settings: PrinterSettings
+  settings: PrinterSettings,
+  posSale?: PosSale | null
 ): Promise<{ success: boolean; message: string }> {
   if (!activeSerialWriter || !activeSerialPort) {
     const connectResult = await connectSerialPrinter();
     if (!connectResult.success || !activeSerialWriter) {
-      await printReceiptViaBrowser(trx, profile, settings);
+      await printReceiptViaBrowser(trx, profile, settings, posSale);
       return {
         success: false,
         message: `${connectResult.error || 'Port Serial belum dibuka'}. Dialihkan ke dialog cetak sistem.`,
@@ -787,8 +912,8 @@ export async function printReceiptViaSerial(
     const copies = settings.printCopies || 1;
 
     for (let c = 0; c < copies; c++) {
-      const copyLabel = copies > 1 ? (c === 0 ? 'LEMBAR NASABAH' : 'LEMBAR ARSIP OUTLET') : undefined;
-      const data = generateEscPosBytes(trx, profile, settings, copyLabel);
+      const copyLabel = copies > 1 ? (c === 0 ? 'LEMBAR PELANGGAN' : 'LEMBAR TOKO / ARSIP') : undefined;
+      const data = generateEscPosBytes(trx, profile, settings, copyLabel, posSale);
 
       await activeSerialWriter.write(data);
 
@@ -801,7 +926,7 @@ export async function printReceiptViaSerial(
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     console.warn('Serial write error:', errorMsg);
-    await printReceiptViaBrowser(trx, profile, settings);
+    await printReceiptViaBrowser(trx, profile, settings, posSale);
     return {
       success: false,
       message: `Gagal cetak Serial: ${errorMsg}. Dialihkan ke dialog cetak browser.`,
@@ -815,10 +940,11 @@ export async function printReceiptViaSerial(
 export function printReceiptViaRawBT(
   trx: Transaction,
   profile: AgentProfile,
-  settings: PrinterSettings
+  settings: PrinterSettings,
+  posSale?: PosSale | null
 ): { success: boolean; message: string } {
   try {
-    const data = generateEscPosBytes(trx, profile, settings);
+    const data = generateEscPosBytes(trx, profile, settings, undefined, posSale);
     let binary = '';
     const bytes = new Uint8Array(data);
     for (let i = 0; i < bytes.byteLength; i++) {
@@ -830,7 +956,7 @@ export function printReceiptViaRawBT(
     return { success: true, message: 'Perintah cetak dikirim ke aplikasi RawBT.' };
   } catch (err: unknown) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    printReceiptViaBrowser(trx, profile, settings);
+    printReceiptViaBrowser(trx, profile, settings, posSale);
     return { success: false, message: `Gagal RawBT: ${errorMsg}. Dialihkan ke browser print.` };
   }
 }
@@ -841,16 +967,17 @@ export function printReceiptViaRawBT(
 export async function executeQuickPrint(
   trx: Transaction,
   profile: AgentProfile,
-  settings: PrinterSettings
+  settings: PrinterSettings,
+  posSale?: PosSale | null
 ): Promise<{ success: boolean; message: string }> {
   if (settings.connectionType === 'bluetooth') {
-    return await printReceiptViaBluetooth(trx, profile, settings);
+    return await printReceiptViaBluetooth(trx, profile, settings, posSale);
   } else if (settings.connectionType === 'serial') {
-    return await printReceiptViaSerial(trx, profile, settings);
+    return await printReceiptViaSerial(trx, profile, settings, posSale);
   } else if (settings.connectionType === 'rawbt') {
-    return printReceiptViaRawBT(trx, profile, settings);
+    return printReceiptViaRawBT(trx, profile, settings, posSale);
   } else {
-    return await printReceiptViaBrowser(trx, profile, settings);
+    return await printReceiptViaBrowser(trx, profile, settings, posSale);
   }
 }
 

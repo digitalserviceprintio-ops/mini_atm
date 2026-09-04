@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Account, Transaction, TransactionType, UserRole } from '../../types';
 import { formatRp } from '../../utils/formatters';
+import { getSecuritySettings, maskCustomerPhone, maskCustomerAccount } from '../../utils/securityCrypto';
 
 interface TransaksiViewProps {
   transactions?: Transaction[];
@@ -35,7 +36,9 @@ export const TransaksiView: React.FC<TransaksiViewProps> = ({
   const [activeCategory, setActiveCategory] = useState<string>('SEMUA');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
+  const [unmaskPrivacy, setUnmaskPrivacy] = useState<boolean>(false);
   const itemsPerPage = 8;
+  const securitySettings = getSecuritySettings();
 
   const categories: (string | TransactionType)[] = [
     'SEMUA',
@@ -269,12 +272,21 @@ export const TransaksiView: React.FC<TransaksiViewProps> = ({
                       <td className="p-3 font-semibold text-slate-900">
                         {t.cust}
                         {t.phoneCust && (
-                          <span className="block text-[10px] text-slate-400 font-normal">
-                            {t.phoneCust}
+                          <span
+                            className="block text-[10px] text-slate-500 font-mono"
+                            title={securitySettings.maskCustomerPhone && !unmaskPrivacy ? 'Nomor HP disensor untuk privasi' : undefined}
+                          >
+                            {securitySettings.maskCustomerPhone && !unmaskPrivacy
+                              ? maskCustomerPhone(t.phoneCust)
+                              : t.phoneCust}
                           </span>
                         )}
                       </td>
-                      <td className="p-3 text-slate-700 font-medium">{t.target}</td>
+                      <td className="p-3 text-slate-700 font-medium font-mono text-[11px]">
+                        {securitySettings.maskCustomerAccount && !unmaskPrivacy && /^\d+$/.test(t.target.replace(/\s/g, ''))
+                          ? maskCustomerAccount(t.target)
+                          : t.target}
+                      </td>
                       <td className="p-3 text-slate-600 text-[11px]">{accName}</td>
                       <td className="p-3 text-right font-bold text-slate-900">
                         {formatRp(t.nominal)}

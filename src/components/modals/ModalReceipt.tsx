@@ -7,12 +7,12 @@ import {
   Check,
   Zap,
   Sliders,
-  ExternalLink,
   Loader2,
   Layers,
   Settings,
+  ShoppingBag,
 } from 'lucide-react';
-import { AgentProfile, PrinterSettings, Transaction } from '../../types';
+import { AgentProfile, PosSale, PrinterSettings, Transaction } from '../../types';
 import { createWhatsAppReceiptMessage, formatRp } from '../../utils/formatters';
 import { executeQuickPrint } from '../../utils/thermalPrinterService';
 
@@ -22,6 +22,8 @@ interface ModalReceiptProps {
   trx: Transaction | null;
   profile: AgentProfile;
   printerSettings: PrinterSettings;
+  posSale?: PosSale | null;
+  posSales?: PosSale[];
   onOpenPrinterSettings?: () => void;
 }
 
@@ -31,6 +33,8 @@ export const ModalReceipt: React.FC<ModalReceiptProps> = ({
   trx,
   profile,
   printerSettings,
+  posSale,
+  posSales = [],
   onOpenPrinterSettings,
 }) => {
   const [copied, setCopied] = useState<boolean>(false);
@@ -46,6 +50,17 @@ export const ModalReceipt: React.FC<ModalReceiptProps> = ({
     }
   }, [printerSettings?.paperWidth]);
 
+  // Determine if this is a retail POS transaction with itemized goods
+  const activePosSale =
+    posSale ||
+    (trx
+      ? posSales.find(
+          (s) => s.id === trx.refNumber || s.id === trx.id || s.invoiceNumber === trx.id
+        ) || null
+      : null);
+
+  const isPosRetail = Boolean(activePosSale && activePosSale.items && activePosSale.items.length > 0);
+
   // Keyboard shortcut listener for Ctrl+P / Cmd+P while modal is open
   useEffect(() => {
     if (!isOpen) return;
@@ -59,17 +74,33 @@ export const ModalReceipt: React.FC<ModalReceiptProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, trx, profile, printerSettings, localPaperWidth]);
+  }, [isOpen, trx, profile, printerSettings, localPaperWidth, activePosSale]);
 
   if (!isOpen || !trx) return null;
 
-  const totalPay = trx.nominal + trx.feeCust;
-  const isVoid = trx.status === 'VOID';
+  const totalPay = isPosRetail ? activePosSale!.totalRevenue : trx.nominal + trx.feeCust;
+  const isVoid = trx.status === 'VOID' || (activePosSale ? activePosSale.status === 'VOID' : false);
+  const cash = isPosRetail
+    ? activePosSale?.cashReceived ?? totalPay
+    : trx.cashReceived ?? totalPay;
+  const change = isPosRetail
+    ? activePosSale?.changeAmount ?? (cash > totalPay ? cash - totalPay : 0)
+    : trx.changeAmount ?? 0;
+
+  const receiptNumber = isPosRetail
+    ? activePosSale!.invoiceNumber || activePosSale!.id
+    : `#${trx.id}`;
+  const cashier = isPosRetail
+    ? activePosSale!.cashierName || 'Kasir 01'
+    : profile.idAgent || 'Operator';
+  const customer = isPosRetail
+    ? activePosSale!.customerName || 'Pelanggan Umum'
+    : trx.cust;
 
   const handleQuickPrint = async () => {
     if (!trx) return;
     setIsPrinting(true);
-    setPrintFeedback('Mengirim ke printer thermal...');
+    setPrintFeedback('Mengirim struk ke printer thermal...');
 
     try {
       const activeConfig: PrinterSettings = {
@@ -77,7 +108,7 @@ export const ModalReceipt: React.FC<ModalReceiptProps> = ({
         paperWidth: localPaperWidth,
       };
 
-      const result = await executeQuickPrint(trx, profile, activeConfig);
+      const result = await executeQuickPrint(trx, profile, activeConfig, activePosSale);
       setPrintFeedback(result.message);
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : String(err);
@@ -89,7 +120,7 @@ export const ModalReceipt: React.FC<ModalReceiptProps> = ({
   };
 
   const handleShareWhatsApp = () => {
-    const waText = createWhatsAppReceiptMessage(trx, profile);
+    const waText = createWhatsAppReceiptMessage(trx, profile, activePosSale);
     const targetPhone = trx.phoneCust
       ? trx.phoneCust.replace(/[^0-9]/g, '').replace(/^0/, '62')
       : '';
@@ -100,17 +131,38 @@ export const ModalReceipt: React.FC<ModalReceiptProps> = ({
   };
 
   const handleCopyText = () => {
-    const text = `STRUK TRANSAKSI - ${profile.storeName}
+    let text = '';
+    if (isPosRetail && activePosSale) {
+      const itemRows = activePosSale.items
+        .map(
+          (it) =>
+            `${it.productName.toUpperCase()}\n  ${it.qty} ${it.unit || 'PCS'} x ${formatRp(it.price)} = ${formatRp(it.subtotal)}`
+        )
+        .join('\n');
+
+      text = `STRUK BUKTI PEMBELIAN RITEL - ${profile.storeName || 'TOKO RITEL & POS'}
+No. Struk: ${receiptNumber} | ${activePosSale.time}
+Kasir: ${cashier} | Pelanggan: ${customer}
+----------------------------------------
+${itemRows}
+----------------------------------------
+Total Item: ${activePosSale.items.length} Item (${activePosSale.totalQty} Qty)
+Subtotal: ${formatRp(activePosSale.totalBeforeDiscount || activePosSale.totalRevenue)}
+${activePosSale.totalDiscount ? `Diskon: -${formatRp(activePosSale.totalDiscount)}\n` : ''}TOTAL: ${formatRp(totalPay)}
+Bayar: ${formatRp(cash)} | Kembali: ${formatRp(change)}
+Status: ${isVoid ? 'DIBATALKAN (VOID)' : 'SUKSES'}
+Terima kasih telah berbelanja!`;
+    } else {
+      text = `STRUK TRANSAKSI - ${profile.storeName}
 No: #${trx.id} | ${trx.time}
-Agen: ${profile.idAgent}
+ID Agen: ${profile.idAgent || '-'}
 Layanan: ${trx.type}
-Pengirim: ${trx.cust}
-Tujuan: ${trx.target}
-Nominal: ${formatRp(trx.nominal)}
-Biaya Layanan: ${formatRp(trx.feeCust)}
+Pengirim: ${trx.cust} | Tujuan: ${trx.target}
+Nominal: ${formatRp(trx.nominal)} | Biaya: ${formatRp(trx.feeCust)}
 TOTAL: ${formatRp(totalPay)}
-Status: ${trx.status}
-${profile.receiptFooter}`;
+Status: ${isVoid ? 'VOID' : 'SUKSES'}
+${profile.receiptFooter || ''}`;
+    }
 
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -121,17 +173,21 @@ ${profile.receiptFooter}`;
     <div className="fixed inset-0 bg-slate-900/65 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 overflow-y-auto receipt-modal-backdrop">
       <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-150 my-6 receipt-modal-card">
         {/* Modal Top Header */}
-        <div className="p-3.5 bg-gradient-to-r from-slate-900 to-blue-950 text-white flex justify-between items-center modal-header">
+        <div className="p-3.5 bg-slate-900 text-white flex justify-between items-center modal-header">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-blue-600/40 rounded-lg border border-blue-400/30">
-              <Printer className="w-4 h-4 text-blue-200" />
+            <div className="p-1.5 bg-white/10 rounded-lg border border-white/15">
+              {isPosRetail ? (
+                <ShoppingBag className="w-4 h-4 text-emerald-300" />
+              ) : (
+                <Printer className="w-4 h-4 text-teal-300" />
+              )}
             </div>
             <div>
               <h3 className="font-bold text-xs text-white leading-tight">
-                Struk Bukti Transaksi
+                {isPosRetail ? 'Struk Kasir Toko Ritel' : 'Struk Bukti Transaksi'}
               </h3>
-              <p className="text-[10px] text-blue-200">
-                Cetak Thermal Siap Pakai (ESC/POS &amp; Driver)
+              <p className="text-[10px] text-slate-300">
+                Format Cetak Thermal Siap Pakai (ESC/POS &amp; Browser)
               </p>
             </div>
           </div>
@@ -172,7 +228,7 @@ ${profile.receiptFooter}`;
                 onClick={() => setLocalPaperWidth('58mm')}
                 className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
                   localPaperWidth === '58mm'
-                    ? 'bg-white text-blue-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -183,7 +239,7 @@ ${profile.receiptFooter}`;
                 onClick={() => setLocalPaperWidth('80mm')}
                 className={`px-2 py-0.5 rounded-md text-[10px] font-bold transition-all cursor-pointer ${
                   localPaperWidth === '80mm'
-                    ? 'bg-white text-blue-700 shadow-xs'
+                    ? 'bg-white text-slate-900 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -200,32 +256,31 @@ ${profile.receiptFooter}`;
               </span>
             )}
             <span className="font-mono hidden sm:inline">
-              Pintasan: <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-700 font-bold">Ctrl+P</kbd>
+              <kbd className="px-1.5 py-0.5 bg-slate-200 rounded text-slate-700 font-bold">Ctrl+P</kbd>
             </span>
           </div>
         </div>
 
         {/* Print Feedback Banner */}
         {printFeedback && (
-          <div className="bg-blue-50 text-blue-900 text-xs px-4 py-2 border-b border-blue-200 flex items-center gap-2 animate-in fade-in duration-150 no-print">
-            <Check className="w-3.5 h-3.5 text-blue-700 shrink-0" />
+          <div className="bg-teal-50 text-teal-900 text-xs px-4 py-2 border-b border-teal-200 flex items-center gap-2 animate-in fade-in duration-150 no-print">
+            <Check className="w-3.5 h-3.5 text-teal-700 shrink-0" />
             <span className="font-medium text-[11px]">{printFeedback}</span>
           </div>
         )}
 
-        {/* Receipt Container */}
-        <div className="p-4 sm:p-5 bg-slate-100/70 flex justify-center items-center">
-          {/* Printable Thermal Receipt Card */}
+        {/* Receipt Container - Authentic Thermal Paper Styling */}
+        <div className="p-4 sm:p-5 bg-slate-100 flex justify-center items-center">
           <div
             id="printableReceipt"
-            className={`p-4 sm:p-5 font-mono text-xs space-y-3 bg-white text-slate-900 select-text shadow-md rounded-lg border border-slate-200 receipt-print-area ${
+            className={`p-4 sm:p-5 font-mono text-xs bg-white text-slate-950 select-text shadow-md rounded-md border border-slate-300 receipt-print-area ${
               localPaperWidth === '58mm' ? 'max-w-[270px] w-full' : 'max-w-[340px] w-full'
             }`}
           >
-            {/* Header */}
-            <div className="text-center border-b border-slate-200 pb-2.5 space-y-1">
+            {/* Header Toko Ritel */}
+            <div className="text-center pb-2 space-y-1">
               {printerSettings.showLogo && profile.logoUrl && (
-                <div className="w-10 h-10 mx-auto rounded-lg overflow-hidden mb-1 border border-slate-200">
+                <div className="w-10 h-10 mx-auto rounded overflow-hidden mb-1 border border-slate-200">
                   <img
                     src={profile.logoUrl}
                     className="w-full h-full object-cover"
@@ -233,102 +288,186 @@ ${profile.receiptFooter}`;
                   />
                 </div>
               )}
-              <h4 className="font-extrabold text-sm text-slate-900 uppercase tracking-tight">
-                {profile.storeName}
+              <h4 className="font-black text-sm text-slate-900 uppercase tracking-tight">
+                {profile.storeName || (isPosRetail ? 'TOKO RITEL & POS' : 'MINI ATM AGENT')}
               </h4>
-              <p className="text-[10px] text-slate-600 font-sans font-medium">
-                {profile.receiptHeader}
-              </p>
+              {profile.receiptHeader && (
+                <p className="text-[10px] text-slate-700 font-sans font-medium">
+                  {profile.receiptHeader}
+                </p>
+              )}
               {profile.address && (
-                <p className="text-[9px] text-slate-500 font-sans leading-tight">
+                <p className="text-[9px] text-slate-600 font-sans leading-tight">
                   {profile.address}
                 </p>
               )}
-              <p className="text-[9px] text-slate-500 font-mono pt-0.5">
-                Telp/WA: {profile.phone}
+              <p className="text-[9px] text-slate-600 font-mono pt-0.5">
+                Telp/WA: {profile.phone || '-'}
               </p>
-              <div className="text-[9px] text-slate-500 font-mono pt-1 border-t border-slate-100 flex justify-between">
-                <span>{trx.time}</span>
-                <span className="font-bold">ID: #{trx.id}</span>
+            </div>
+
+            {/* Separator Garis Putus-Putus */}
+            <div className="border-b border-dashed border-slate-400 my-2" />
+
+            {/* Metadata Struk Ritel */}
+            <div className="space-y-0.5 text-[10.5px]">
+              <div className="flex justify-between">
+                <span className="text-slate-600">No. Struk:</span>
+                <span className="font-bold">{receiptNumber}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">Tanggal:</span>
+                <span>{isPosRetail ? activePosSale!.time : trx.time}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">Kasir:</span>
+                <span>{cashier}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-600">Pelanggan:</span>
+                <span className="font-medium truncate max-w-[140px]">{customer}</span>
+              </div>
+              {isPosRetail && activePosSale?.memberNumber && (
+                <div className="flex justify-between">
+                  <span className="text-slate-600">No. Member:</span>
+                  <span className="font-bold">{activePosSale.memberNumber}</span>
+                </div>
+              )}
+              {!isPosRetail && settingsRefNumber(printerSettings, trx)}
             </div>
 
             {/* Void Banner if Void */}
             {isVoid && (
-              <div className="bg-red-50 text-red-700 p-1.5 rounded text-center font-bold text-xs border border-red-200">
+              <div className="my-2 bg-red-50 text-red-700 p-1.5 rounded text-center font-bold text-xs border border-red-200">
                 *** TRANSAKSI DIBATALKAN (VOID) ***
               </div>
             )}
 
-            {/* Transaction Data */}
-            <div className="space-y-1 text-[11px]">
-              {printerSettings.showIdAgent && (
-                <div className="flex justify-between">
-                  <span className="text-slate-500">ID Agen:</span>
-                  <span className="font-semibold">{profile.idAgent}</span>
+            {/* Separator Garis Putus-Putus */}
+            <div className="border-b border-dashed border-slate-400 my-2" />
+
+            {/* Body: Daftar Item Ritel ATAU Layanan Mini ATM */}
+            {isPosRetail && activePosSale ? (
+              <div className="space-y-2 py-1">
+                {activePosSale.items.map((it, idx) => (
+                  <div key={idx} className="space-y-0.5 text-[11px]">
+                    <div className="font-bold text-slate-900 uppercase break-words leading-tight">
+                      {it.productName}
+                    </div>
+                    <div className="flex justify-between items-center text-slate-700">
+                      <span>
+                        {it.qty} {it.unit || 'PCS'} x {formatRp(it.price)}
+                      </span>
+                      <span className="font-bold text-slate-900">{formatRp(it.subtotal)}</span>
+                    </div>
+                    {it.discountAmount && it.discountAmount > 0 ? (
+                      <div className="text-[9.5px] text-rose-600 pl-2">
+                        (Diskon Item: -{formatRp(it.discountAmount)})
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+
+                <div className="border-b border-dashed border-slate-300 pt-1 my-1.5" />
+
+                <div className="space-y-0.5 text-[10.5px]">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Total Item:</span>
+                    <span>
+                      {activePosSale.items.length} Item ({activePosSale.totalQty} Qty)
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Subtotal:</span>
+                    <span>
+                      {formatRp(activePosSale.totalBeforeDiscount || activePosSale.totalRevenue)}
+                    </span>
+                  </div>
+                  {(activePosSale.totalDiscount || 0) > 0 && (
+                    <div className="flex justify-between text-rose-700 font-bold">
+                      <span>Total Diskon:</span>
+                      <span>-{formatRp(activePosSale.totalDiscount || 0)}</span>
+                    </div>
+                  )}
+                  {activePosSale.discountFromPoints && activePosSale.discountFromPoints > 0 ? (
+                    <div className="flex justify-between text-rose-700 font-bold">
+                      <span>Diskon Poin:</span>
+                      <span>-{formatRp(activePosSale.discountFromPoints)}</span>
+                    </div>
+                  ) : null}
                 </div>
-              )}
-              {printerSettings.showRefNumber && trx.refNumber && (
+              </div>
+            ) : (
+              <div className="space-y-1 text-[11px] py-1">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">No. Ref:</span>
-                  <span className="font-mono text-[10px] font-bold">{trx.refNumber}</span>
+                  <span className="text-slate-600">Layanan:</span>
+                  <span className="font-bold text-slate-900">{trx.type}</span>
                 </div>
-              )}
-              <div className="flex justify-between">
-                <span className="text-slate-500">Layanan:</span>
-                <span className="font-bold text-blue-900">{trx.type}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Pengirim/Nasabah:</span>
-                <span className="font-semibold">{trx.cust}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Tujuan/Penerima:</span>
-                <span className="font-semibold">{trx.target}</span>
-              </div>
-            </div>
-
-            {/* Nominal Breakdown */}
-            <div className="border-t border-b border-dashed border-slate-400 py-2 space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-600">Nominal:</span>
-                <span className="font-bold">{formatRp(trx.nominal)}</span>
-              </div>
-              <div className="flex justify-between text-slate-600 text-[11px]">
-                <span>Biaya Layanan:</span>
-                <span>{formatRp(trx.feeCust)}</span>
-              </div>
-              <div className="flex justify-between font-extrabold text-sm text-slate-900 pt-1 border-t border-slate-200">
-                <span>TOTAL BAYAR:</span>
-                <span className="font-mono text-blue-950">{formatRp(totalPay)}</span>
-              </div>
-            </div>
-
-            {/* Status */}
-            <div className="flex justify-between text-[10px] text-slate-600">
-              <span>Status:</span>
-              <span
-                className={`font-bold ${
-                  isVoid ? 'text-red-600' : 'text-emerald-700'
-                }`}
-              >
-                {isVoid ? 'VOID / BATAL' : 'BERHASIL / SUKSES'}
-              </span>
-            </div>
-
-            {/* Notes if any */}
-            {printerSettings.showNotes && trx.notes && (
-              <div className="text-[10px] text-slate-500 bg-slate-50 p-1.5 rounded border border-slate-100">
-                <span>Ket: {trx.notes}</span>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Pengirim:</span>
+                  <span className="font-semibold">{trx.cust}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Tujuan/Rek:</span>
+                  <span className="font-semibold">{trx.target}</span>
+                </div>
+                <div className="border-b border-dashed border-slate-300 my-1.5" />
+                <div className="flex justify-between">
+                  <span className="text-slate-600">Nominal:</span>
+                  <span className="font-bold">{formatRp(trx.nominal)}</span>
+                </div>
+                <div className="flex justify-between text-slate-600">
+                  <span>Biaya Admin:</span>
+                  <span>{formatRp(trx.feeCust)}</span>
+                </div>
               </div>
             )}
 
-            {/* Footer Text */}
-            {printerSettings.showFooter && (
-              <div className="text-center text-[9px] text-slate-500 pt-2 font-sans whitespace-pre-line border-t border-slate-200 leading-tight">
-                {profile.receiptFooter || printerSettings.customFooterNote}
+            {/* Total Bayar Garis Ganda Toko Ritel */}
+            <div className="border-t-2 border-b-2 border-slate-900 py-1.5 my-2 flex justify-between items-center text-xs">
+              <span className="font-black text-slate-900 uppercase">TOTAL BAYAR:</span>
+              <span className="font-black text-sm text-slate-900">{formatRp(totalPay)}</span>
+            </div>
+
+            {/* Pembayaran & Kembalian */}
+            <div className="space-y-0.5 text-[11px]">
+              <div className="flex justify-between text-slate-700">
+                <span>Bayar ({isPosRetail ? activePosSale?.paymentMethod || 'Tunai' : 'Tunai'}):</span>
+                <span className="font-bold">{formatRp(cash)}</span>
               </div>
-            )}
+              <div className="flex justify-between font-bold text-slate-900">
+                <span>Kembalian:</span>
+                <span className="font-black text-xs">{formatRp(change)}</span>
+              </div>
+            </div>
+
+            {/* Poin Loyalitas Jika Ada */}
+            {isPosRetail && activePosSale?.pointsEarned ? (
+              <div className="pt-1.5 mt-1.5 border-t border-dashed border-slate-300 flex justify-between text-[10px] text-emerald-800 font-bold">
+                <span>Poin Didapat:</span>
+                <span>+{activePosSale.pointsEarned} Poin</span>
+              </div>
+            ) : null}
+
+            {/* Barcode Garis Simulasi Ritel */}
+            <div className="text-center my-3 pt-1 border-t border-dashed border-slate-300">
+              <div className="font-mono text-xs tracking-widest font-black select-none text-slate-900">
+                |||| | ||||| || |||||| |||| |
+              </div>
+              <div className="text-[9px] tracking-wider text-slate-600 mt-0.5">
+                * {receiptNumber} *
+              </div>
+            </div>
+
+            {/* Footer Resmi Struk Toko Ritel */}
+            <div className="text-center text-[9px] text-slate-600 pt-1.5 border-t border-dashed border-slate-400 space-y-1 leading-tight">
+              <p className="font-bold text-slate-900">*** TERIMA KASIH TELAH BERBELANJA ***</p>
+              <p>BARANG YANG SUDAH DIBELI TIDAK DAPAT DITUKAR / DIKEMBALIKAN KECUALI DENGAN PERJANJIAN</p>
+              <p className="text-[8.5px]">SMS/WA LAYANAN: {profile.phone || '-'}</p>
+              {profile.receiptFooter && (
+                <p className="pt-1 text-[8.5px] italic">{profile.receiptFooter}</p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -340,19 +479,19 @@ ${profile.receiptFooter}`;
             onClick={handleQuickPrint}
             disabled={isPrinting}
             id="btnQuickPrint"
-            className="w-full bg-blue-700 hover:bg-blue-800 active:bg-blue-900 disabled:opacity-75 text-white font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-md shadow-blue-700/20 transition-all cursor-pointer"
+            className="w-full bg-slate-900 hover:bg-slate-800 active:bg-slate-950 disabled:opacity-75 text-white font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
           >
             {isPrinting ? (
               <Loader2 className="w-4 h-4 animate-spin text-white" />
             ) : (
-              <Zap className="w-4 h-4 text-amber-300 fill-amber-300" />
+              <Zap className="w-4 h-4 text-amber-400 fill-amber-400" />
             )}
             <span>
               {isPrinting
                 ? 'Sedang Mencetak...'
-                : `⚡ Print Cepat Struk (${localPaperWidth})`}
+                : `⚡ Cetak Struk Ritel (${localPaperWidth})`}
             </span>
-            <span className="text-[10px] bg-blue-900/80 px-2 py-0.5 rounded text-blue-200 ml-1 font-mono uppercase">
+            <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded text-white ml-1 font-mono uppercase">
               {printerSettings.connectionType}
             </span>
           </button>
@@ -396,3 +535,16 @@ ${profile.receiptFooter}`;
     </div>
   );
 };
+
+function settingsRefNumber(settings: PrinterSettings, trx: Transaction) {
+  if (settings.showRefNumber && trx.refNumber) {
+    return (
+      <div className="flex justify-between">
+        <span className="text-slate-600">No. Ref:</span>
+        <span className="font-mono text-[10px] font-bold">{trx.refNumber}</span>
+      </div>
+    );
+  }
+  return null;
+}
+

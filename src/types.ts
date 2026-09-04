@@ -21,6 +21,8 @@ export interface Transaction {
   pointsRedeemed?: number;
   discountFromPoints?: number;
   voucherClaimId?: string;
+  cashReceived?: number;
+  changeAmount?: number;
 }
 
 export type AccountType = 'Kas' | 'Bank' | 'E-Wallet';
@@ -96,9 +98,12 @@ export interface PosSale {
   customerPhone?: string;
   memberId?: string;
   memberNumber?: string;
+  pointsEarned?: number;
   pointsRedeemed?: number;
   discountFromPoints?: number;
   voucherClaimId?: string;
+  cashReceived?: number;
+  changeAmount?: number;
   notes?: string;
   relatedTrxId?: string;
   status?: 'SUCCESS' | 'VOID';
@@ -301,8 +306,28 @@ export type ActiveTab =
   | 'kasir-fisik'
   | 'member-pelanggan'
   | 'hak-akses'
+  | 'keamanan-sistem'
   | 'profil-agen'
   | 'setting-printer'
   | 'database-spreadsheet'
   | 'backup-reset'
   | 'tentang-sistem';
+
+export interface SecurityThreatItem {
+  id: string;
+  timestamp: string;
+  threatType: 'SQL_INJECTION' | 'XSS_ATTACK' | 'PATH_TRAVERSAL' | 'RATE_BURST' | 'UNAUTHORIZED_ACCESS' | 'MALICIOUS_PAYLOAD' | 'TAMPERING_DETECTED';
+  severity: 'TINGGI' | 'SEDANG' | 'KRITIS' | 'RENDAH';
+  description: string;
+  status: 'TERBLOKIR' | 'DIMURNIKAN' | 'DIPANTAU';
+  source: string; // Zero IP: Sanitized source label (e.g. "Web Client Shield", "WAF Engine"), never plain IP
+}
+
+export interface SecurityPrivacySettings {
+  maskCustomerPhone: boolean; // Sensor nomor HP pelanggan di layar (contoh: 0812-****-7890)
+  maskCustomerAccount: boolean; // Sensor nomor rekening tujuan di layar (contoh: *******1234)
+  encryptLocalStorage: boolean; // Enkripsi AES-256 pada penyimpanan lokal browser
+  strictXssProtection: boolean; // Perlindungan otomatis pembersihan karakter injeksi form
+  soundAlertOnThreat: boolean; // Peringatan audio jika ada akses mencurigakan
+}
+

@@ -26,6 +26,8 @@ import {
   Coins,
   Award,
   UserCheck,
+  Banknote,
+  AlertCircle,
 } from 'lucide-react';
 import { CartItem, CustomerMember, MemberVoucherClaim, PointExchangeSettings, Product, UserRole } from '../../types';
 import { formatRp } from '../../utils/formatters';
@@ -54,7 +56,9 @@ interface KasirFisikViewProps {
     memberId?: string,
     pointsRedeemed?: number,
     discountFromPoints?: number,
-    voucherClaimId?: string
+    voucherClaimId?: string,
+    cashReceived?: number,
+    changeAmount?: number
   ) => void;
   onOpenRestock?: (product: Product) => void;
 }
@@ -83,6 +87,9 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
   // Point & Voucher Redemption State in POS
   const [pointsToRedeem, setPointsToRedeem] = useState<number>(0);
   const [selectedVoucherId, setSelectedVoucherId] = useState<string>('');
+
+  // Cash Received & Change (Kembalian) State
+  const [cashReceivedInput, setCashReceivedInput] = useState<string>('');
 
   const selectedMember = members.find((m) => m.id === selectedMemberId);
   const memberPoints = selectedMember?.points || 0;
@@ -380,6 +387,7 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
     setCart([]);
     setCustomerName('');
     setNotes('');
+    setCashReceivedInput('');
   };
 
   // Calculate discount amount for a single item
@@ -465,8 +473,29 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
   const profitMarginPct = finalCartTotal > 0 ? Math.round((cartProfit / finalCartTotal) * 100) : 0;
   const totalCartQty = cart.reduce((acc, item) => acc + item.qty, 0);
 
+  // Cash Received & Change Calculations
+  const parsedCashReceived = cashReceivedInput.trim()
+    ? parseFloat(cashReceivedInput.replace(/[^0-9]/g, '')) || 0
+    : 0;
+  const effectiveCashReceived = paymentMethod === 'Tunai' ? parsedCashReceived : finalCartTotal;
+  const changeAmount = effectiveCashReceived > 0 ? effectiveCashReceived - finalCartTotal : 0;
+  const isCashInsufficient = paymentMethod === 'Tunai' && effectiveCashReceived > 0 && changeAmount < 0;
+
   const handleCheckout = () => {
     if (cart.length === 0) return;
+
+    if (paymentMethod === 'Tunai' && effectiveCashReceived > 0 && changeAmount < 0) {
+      playErrorBeep();
+      showToast(
+        'error',
+        'Uang Tunai Kurang',
+        `Nominal uang diterima (${formatRp(effectiveCashReceived)}) kurang ${formatRp(
+          Math.abs(changeAmount)
+        )} dari total tagihan.`
+      );
+      return;
+    }
+
     const cartWithCalculatedDiscounts = cart.map((item) => ({
       ...item,
       discountAmount: getItemDiscountAmount(item),
@@ -474,6 +503,11 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
 
     const selectedMember = members.find((m) => m.id === selectedMemberId);
     const finalCustomerName = selectedMember ? selectedMember.name : customerName.trim() || undefined;
+
+    const finalCashReceived = paymentMethod === 'Tunai'
+      ? (effectiveCashReceived > 0 ? effectiveCashReceived : finalCartTotal)
+      : finalCartTotal;
+    const finalChangeAmount = paymentMethod === 'Tunai' ? Math.max(0, changeAmount) : 0;
 
     onCheckoutPOS(
       cartWithCalculatedDiscounts,
@@ -484,7 +518,9 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
       selectedMemberId || undefined,
       pointsToRedeem > 0 ? pointsToRedeem : undefined,
       discountFromPoints > 0 ? discountFromPoints : undefined,
-      selectedVoucherId || undefined
+      selectedVoucherId || undefined,
+      finalCashReceived,
+      finalChangeAmount
     );
     clearCart();
     setSelectedMemberId('');
@@ -1102,6 +1138,101 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
                     <option value="Transfer Mandiri">Transfer Bank Mandiri</option>
                   </select>
                 </div>
+
+                {/* Input Nominal Uang Diterima & Kembalian (Khusus Tunai) */}
+                {paymentMethod === 'Tunai' && (
+                  <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                        <Banknote className="w-4 h-4 text-emerald-600" />
+                        <span>Nominal Uang Tunai Diterima:</span>
+                      </label>
+                      {effectiveCashReceived > 0 && (
+                        <span className="text-[11px] font-mono text-slate-500 font-semibold">
+                          {formatRp(effectiveCashReceived)}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">
+                        Rp
+                      </span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={
+                          cashReceivedInput
+                            ? parseInt(cashReceivedInput.replace(/[^0-9]/g, '') || '0', 10).toLocaleString('id-ID')
+                            : ''
+                        }
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/[^0-9]/g, '');
+                          setCashReceivedInput(raw);
+                        }}
+                        placeholder={`Contoh: ${finalCartTotal.toLocaleString('id-ID')}`}
+                        className="w-full pl-9 pr-3 py-2 bg-white border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:outline-hidden"
+                      />
+                    </div>
+
+                    {/* Tombol Cepat Nominal Uang */}
+                    <div className="flex flex-wrap gap-1.5 pt-0.5">
+                      <button
+                        type="button"
+                        onClick={() => setCashReceivedInput(String(finalCartTotal))}
+                        className="px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-800 border border-emerald-300 rounded-md text-[10px] font-bold transition-all shadow-2xs cursor-pointer"
+                      >
+                        ⚡ Uang Pas ({formatRp(finalCartTotal)})
+                      </button>
+
+                      {[10000, 20000, 50000, 100000, 200000, 500000].map((nom) => {
+                        if (nom < finalCartTotal && nom !== 50000 && nom !== 100000) return null;
+                        return (
+                          <button
+                            key={nom}
+                            type="button"
+                            onClick={() => setCashReceivedInput(String(nom))}
+                            className={`px-2 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-md text-[10px] font-semibold transition-all cursor-pointer ${
+                              effectiveCashReceived === nom ? 'border-emerald-500 bg-emerald-50 text-emerald-900 font-bold' : ''
+                            }`}
+                          >
+                            {formatRp(nom)}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Status Kembalian Real-time */}
+                    {effectiveCashReceived > 0 && (
+                      <div
+                        className={`p-2.5 rounded-lg border flex items-center justify-between text-xs transition-all ${
+                          changeAmount >= 0
+                            ? 'bg-emerald-100/70 border-emerald-300 text-emerald-950'
+                            : 'bg-rose-50 border-rose-300 text-rose-800'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5 font-bold">
+                          {changeAmount >= 0 ? (
+                            <>
+                              <CheckCircle className="w-4 h-4 text-emerald-600" />
+                              <span>Kembalian:</span>
+                            </>
+                          ) : (
+                            <>
+                              <AlertCircle className="w-4 h-4 text-rose-600" />
+                              <span>Uang Masih Kurang:</span>
+                            </>
+                          )}
+                        </span>
+                        <span className="font-mono text-sm font-extrabold">
+                          {changeAmount >= 0
+                            ? formatRp(changeAmount)
+                            : `- ${formatRp(Math.abs(changeAmount))}`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1148,6 +1279,19 @@ export const KasirFisikView: React.FC<KasirFisikViewProps> = ({
                   <span>Kasir Bertugas:</span>
                   <span className="font-semibold text-slate-700">{operatorName}</span>
                 </div>
+
+                {paymentMethod === 'Tunai' && effectiveCashReceived > 0 && (
+                  <div className="pt-1.5 border-t border-slate-200 space-y-1 text-[11px]">
+                    <div className="flex justify-between text-slate-700">
+                      <span>Uang Tunai Diterima:</span>
+                      <span className="font-mono font-semibold">{formatRp(effectiveCashReceived)}</span>
+                    </div>
+                    <div className={`flex justify-between font-bold ${changeAmount >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                      <span>{changeAmount >= 0 ? 'Kembalian Pelanggan:' : 'Kekurangan Uang:'}</span>
+                      <span className="font-mono">{changeAmount >= 0 ? formatRp(changeAmount) : `- ${formatRp(Math.abs(changeAmount))}`}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

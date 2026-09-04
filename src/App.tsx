@@ -54,6 +54,11 @@ import { SettingPrinterView } from './components/views/SettingPrinterView';
 import { DatabaseSpreadsheetView } from './components/views/DatabaseSpreadsheetView';
 import { BackupResetView } from './components/views/BackupResetView';
 import { TentangSistemView } from './components/views/TentangSistemView';
+import { KeamananSistemView } from './components/views/KeamananSistemView';
+import { SecurityAlertBanner } from './components/common/SecurityAlertBanner';
+import { SecurityThreatItem } from './types';
+import { subscribeToThreats, dismissActiveAlert, recordThreat } from './utils/threatDetector';
+import { sanitizeText } from './utils/securityCrypto';
 import { ModalTrx } from './components/modals/ModalTrx';
 import { ModalReceipt } from './components/modals/ModalReceipt';
 import { ModalConfirmVoid } from './components/modals/ModalConfirmVoid';
@@ -161,6 +166,7 @@ export default function App() {
 
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState<boolean>(false);
   const [receiptTrx, setReceiptTrx] = useState<Transaction | null>(null);
+  const [receiptPosSale, setReceiptPosSale] = useState<PosSale | null>(null);
 
   const [isVoidModalOpen, setIsVoidModalOpen] = useState<boolean>(false);
   const [voidTrx, setVoidTrx] = useState<Transaction | null>(null);
@@ -206,6 +212,16 @@ export default function App() {
   const [isMutationModalOpen, setIsMutationModalOpen] = useState<boolean>(false);
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState<boolean>(false);
   const [isResetModalOpen, setIsResetModalOpen] = useState<boolean>(false);
+
+  // Real-Time Intrusion & Threat Alert Listener
+  const [activeThreatAlert, setActiveThreatAlert] = useState<SecurityThreatItem | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToThreats((_logs, latest) => {
+      setActiveThreatAlert(latest);
+    });
+    return unsubscribe;
+  }, []);
 
   // Calculate member tier helper
   const calculateTier = (points: number): MemberTier => {
@@ -1320,7 +1336,9 @@ export default function App() {
     memberId?: string,
     pointsRedeemed: number = 0,
     discountFromPoints: number = 0,
-    voucherClaimId?: string
+    voucherClaimId?: string,
+    cashReceived?: number,
+    changeAmount?: number
   ) => {
     const saleId = `POS-${Date.now().toString().slice(-6)}`;
     const invoiceNum = `INV-${Date.now().toString().slice(-8)}`;
@@ -1430,6 +1448,8 @@ export default function App() {
       notes,
       memberId: memberId || undefined,
       memberNumber: selectedMember?.memberNumber || undefined,
+      cashReceived: cashReceived ?? netRevenue,
+      changeAmount: changeAmount ?? 0,
     };
     setPosSales((prev) => [newPosSale, ...prev]);
 
@@ -1525,6 +1545,8 @@ export default function App() {
       refNumber: saleId,
       memberId: memberId || undefined,
       memberNumber: selectedMember?.memberNumber || undefined,
+      cashReceived: cashReceived ?? netRevenue,
+      changeAmount: changeAmount ?? 0,
     };
 
     setTransactions((prev) => [newTrx, ...prev]);
@@ -1553,6 +1575,7 @@ export default function App() {
     recordVersionChange(`Penjualan POS #${saleId} (${totalQty} item) Rp ${netRevenue.toLocaleString('id-ID')}${totalDiscount > 0 ? ` [Diskon Rp ${totalDiscount.toLocaleString('id-ID')}]` : ''}`, 'TRANSACTION');
 
     // 8. Open receipt modal
+    setReceiptPosSale(newPosSale);
     setReceiptTrx(newTrx);
     setIsReceiptModalOpen(true);
   };
@@ -1624,6 +1647,40 @@ export default function App() {
       setAccounts(updatedAccounts);
     }
     recordVersionChange(`Batal/VOID penjualan POS #${saleId}`, 'TRANSACTION');
+  };
+
+  const handleReprintPOS = (sale: PosSale) => {
+    setReceiptPosSale(sale);
+    const matchingTrx = transactions.find((t) => t.refNumber === sale.id || t.id === sale.id);
+    if (matchingTrx) {
+      setReceiptTrx({
+        ...matchingTrx,
+        cashReceived: sale.cashReceived ?? matchingTrx.cashReceived ?? sale.totalRevenue,
+        changeAmount: sale.changeAmount ?? matchingTrx.changeAmount ?? 0,
+      });
+    } else {
+      const itemsSummary = sale.items.map((it) => `${it.productName} (${it.qty}x)`).join(', ');
+      const virtualTrx: Transaction = {
+        id: sale.invoiceNumber || sale.id,
+        time: sale.time,
+        type: 'PEMBAYARAN',
+        cust: sale.customerName || 'Pelanggan Kasir POS',
+        target: 'Penjualan Barang Fisik / POS',
+        nominal: sale.totalRevenue,
+        feeCust: 0,
+        feeAdmin: 0,
+        status: sale.status === 'VOID' ? 'VOID' : 'SUCCESS',
+        accountId: sale.accountId || 'acc1',
+        notes: `POS #${sale.id}: ${itemsSummary}`,
+        refNumber: sale.id,
+        memberId: sale.memberId,
+        memberNumber: sale.memberNumber,
+        cashReceived: sale.cashReceived ?? sale.totalRevenue,
+        changeAmount: sale.changeAmount ?? 0,
+      };
+      setReceiptTrx(virtualTrx);
+    }
+    setIsReceiptModalOpen(true);
   };
 
   const handleRegisterUser = (userData: Partial<AppUser>): { success: boolean; message: string; user?: AppUser } => {
@@ -1756,6 +1813,7 @@ export default function App() {
         currentUser={currentUser}
         onLogout={handleLogout}
         onNavigateToSpreadsheet={() => setActiveTab('database-spreadsheet')}
+        onNavigateToSecurity={() => setActiveTab('keamanan-sistem')}
       />
 
       <div className="flex flex-1 relative">
@@ -1776,6 +1834,17 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="flex-1 p-4 md:p-6 max-w-7xl mx-auto w-full space-y-6">
+          {/* Active Security Threat Warning Banner */}
+          <SecurityAlertBanner
+            alert={activeThreatAlert}
+            onDismiss={dismissActiveAlert}
+            onOpenSecurityCenter={() => {
+              if (currentRole === 'Admin') {
+                setActiveTab('keamanan-sistem');
+              }
+            }}
+          />
+
           {/* Strict Role Guard: Check if Kasir attempts to open Admin-only pages */}
           {currentRole === 'Kasir' &&
             [
@@ -1783,6 +1852,7 @@ export default function App() {
               'arus-kas',
               'akun-kas',
               'hak-akses',
+              'keamanan-sistem',
               'profil-agen',
               'database-spreadsheet',
               'backup-reset',
@@ -2007,6 +2077,7 @@ export default function App() {
               currentRole={currentRole}
               operatorName={currentUser?.name || 'Kasir'}
               onVoidSale={handleVoidPosSale}
+              onReprintReceipt={handleReprintPOS}
               onNavigateToPOS={() => setActiveTab('kasir-fisik')}
               onNavigateToStock={() => setActiveTab('stok-barang')}
             />
@@ -2082,6 +2153,10 @@ export default function App() {
             />
           )}
 
+          {activeTab === 'keamanan-sistem' && currentRole === 'Admin' && (
+            <KeamananSistemView />
+          )}
+
           {activeTab === 'tentang-sistem' && (
             <TentangSistemView
               profile={profile}
@@ -2113,8 +2188,11 @@ export default function App() {
         onClose={() => {
           setIsReceiptModalOpen(false);
           setReceiptTrx(null);
+          setReceiptPosSale(null);
         }}
         trx={receiptTrx}
+        posSale={receiptPosSale}
+        posSales={posSales}
         profile={profile}
         printerSettings={printerSettings}
         onOpenPrinterSettings={() => setActiveTab('setting-printer')}

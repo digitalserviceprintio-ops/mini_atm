@@ -18,30 +18,30 @@ export const RetailSalesIllustration: React.FC<RetailSalesIllustrationProps> = (
       >
         <defs>
           <linearGradient id="counterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#1e3a8a" />
-            <stop offset="100%" stopColor="#0f172a" />
+            <stop offset="0%" stopColor="#064e3b" />
+            <stop offset="100%" stopColor="#042f2e" />
           </linearGradient>
           <linearGradient id="screenGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#0284c7" />
-            <stop offset="100%" stopColor="#0369a1" />
+            <stop offset="0%" stopColor="#0d9488" />
+            <stop offset="100%" stopColor="#0f766e" />
           </linearGradient>
           <linearGradient id="accentGlow" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#10b981" />
-            <stop offset="100%" stopColor="#06b6d4" />
+            <stop offset="0%" stopColor="#2dd4bf" />
+            <stop offset="100%" stopColor="#34d399" />
           </linearGradient>
           <linearGradient id="cartGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#f59e0b" />
-            <stop offset="100%" stopColor="#d97706" />
+            <stop offset="0%" stopColor="#10b981" />
+            <stop offset="100%" stopColor="#059669" />
           </linearGradient>
           <filter id="softShadow" x="-10%" y="-10%" width="120%" height="120%">
-            <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15" floodColor="#003366" />
+            <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.2" floodColor="#042f2e" />
           </filter>
         </defs>
 
         {/* Ambient background glow & elements */}
-        <circle cx="280" cy="150" r="130" fill="#e0f2fe" fillOpacity="0.5" />
-        <circle cx="460" cy="90" r="60" fill="#dcfce7" fillOpacity="0.6" />
-        <circle cx="100" cy="180" r="70" fill="#fef3c7" fillOpacity="0.5" />
+        <circle cx="280" cy="150" r="130" fill="#ccfbf1" fillOpacity="0.5" />
+        <circle cx="460" cy="90" r="60" fill="#d1fae5" fillOpacity="0.6" />
+        <circle cx="100" cy="180" r="70" fill="#ecfdf5" fillOpacity="0.6" />
 
         {/* Floor base line with subtle perspective */}
         <ellipse cx="280" cy="265" rx="240" ry="18" fill="#f1f5f9" />
@@ -59,10 +59,10 @@ export const RetailSalesIllustration: React.FC<RetailSalesIllustrationProps> = (
         {/* Floating Badge 2 (Top Right) */}
         <g className="animate-pulse" style={{ animationDuration: '4s' }}>
           <rect x="380" y="35" width="135" height="56" rx="12" fill="#ffffff" filter="url(#softShadow)" stroke="#e2e8f0" />
-          <rect x="395" y="48" width="24" height="24" rx="6" fill="#eff6ff" />
-          <path d="M401 64 L407 58 L411 61 L415 54" stroke="#2563eb" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <rect x="395" y="48" width="24" height="24" rx="6" fill="#f0fdfa" />
+          <path d="M401 64 L407 58 L411 61 L415 54" stroke="#0d9488" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           <text x="428" y="56" fill="#64748b" fontSize="9" fontWeight="600" fontFamily="sans-serif">Pertumbuhan Omset</text>
-          <text x="428" y="73" fill="#16a34a" fontSize="13" fontWeight="800" fontFamily="sans-serif">+28.4% Naik</text>
+          <text x="428" y="73" fill="#0f766e" fontSize="13" fontWeight="800" fontFamily="sans-serif">+28.4% Naik</text>
         </g>
 
         {/* CASHIER DESK / COUNTER */}
@@ -185,14 +185,14 @@ export const RetailSalesIllustration: React.FC<RetailSalesIllustrationProps> = (
         <g>
           <path
             d="M 85 200 L 130 200 L 138 255 L 77 255 Z"
-            fill="#0284c7"
+            fill="#0d9488"
             filter="url(#softShadow)"
           />
           {/* Bag handles */}
           <path
             d="M 98 200 C 98 180, 117 180, 117 200"
             fill="none"
-            stroke="#0369a1"
+            stroke="#0f766e"
             strokeWidth="3.5"
             strokeLinecap="round"
           />

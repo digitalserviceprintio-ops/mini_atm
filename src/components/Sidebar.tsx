@@ -341,6 +341,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </button>
 
                 <button
+                  onClick={() => handleSelectTab('keamanan-sistem')}
+                  id="nav-keamanan-sistem"
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${
+                    activeTab === 'keamanan-sistem'
+                      ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                      : 'text-blue-100 hover:bg-blue-700/60'
+                  }`}
+                >
+                  <ShieldCheck className="w-4 h-4 text-emerald-300" />
+                  <span className="flex-1">Pusat Keamanan & Enkripsi</span>
+                  <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded border border-emerald-500/30">
+                    AES-256
+                  </span>
+                </button>
+
+                <button
                   onClick={() => handleSelectTab('profil-agen')}
                   id="nav-profil-agen"
                   className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all font-medium text-left cursor-pointer ${

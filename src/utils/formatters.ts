@@ -1,4 +1,4 @@
-import { Transaction, AgentProfile, Account } from '../types';
+import { Transaction, AgentProfile, Account, PosSale } from '../types';
 import { exportTransactionsToExcel } from './excelExport';
 
 export function formatRp(num: number | string | null | undefined): string {
@@ -75,26 +75,72 @@ export function exportToCSV(transactions: Transaction[], accounts: Account[], pr
   exportTransactionsToExcel(transactions, accounts, profile);
 }
 
-export function createWhatsAppReceiptMessage(t: Transaction, profile: AgentProfile): string {
+export function createWhatsAppReceiptMessage(t: Transaction, profile: AgentProfile, posSale?: PosSale | null): string {
+  // If this is a retail POS sale with items
+  if (posSale && posSale.items && posSale.items.length > 0) {
+    const isVoid = posSale.status === 'VOID' || t.status === 'VOID';
+    let itemRows = '';
+    posSale.items.forEach((it) => {
+      itemRows += `${it.productName.toUpperCase()}\n  ${it.qty} ${it.unit || 'PCS'} x ${formatRp(it.price)} = ${formatRp(it.subtotal)}\n`;
+      if (it.discountAmount && it.discountAmount > 0) {
+        itemRows += `  (Diskon Item: -${formatRp(it.discountAmount)})\n`;
+      }
+    });
+
+    const subtotal = posSale.totalBeforeDiscount || posSale.totalRevenue;
+    const totalDiscount = posSale.totalDiscount || 0;
+    const finalTotal = posSale.totalRevenue;
+    const cash = posSale.cashReceived ?? finalTotal;
+    const change = posSale.changeAmount ?? (cash > finalTotal ? cash - finalTotal : 0);
+
+    const message = `*STRUK BUKTI PEMBELIAN RITEL*
+*${profile.storeName || 'TOKO RITEL & POS'}*
+${profile.receiptHeader ? `${profile.receiptHeader}\n` : ''}${profile.address ? `${profile.address}\n` : ''}Telp/WA: ${profile.phone || '-'}
+================================
+No. Struk : ${posSale.invoiceNumber || posSale.id}
+Tanggal   : ${posSale.time}
+Kasir     : ${posSale.cashierName || 'Kasir'}
+Pelanggan : ${posSale.customerName || 'Pelanggan Umum'}${posSale.memberNumber ? ` (No: ${posSale.memberNumber})` : ''}
+${isVoid ? '*** TRANSAKSI DIBATALKAN (VOID) ***\n' : ''}--------------------------------
+${itemRows.trim()}
+--------------------------------
+Total Item   : ${posSale.items.length} Item (${posSale.totalQty} Qty)
+Subtotal     : ${formatRp(subtotal)}${totalDiscount > 0 ? `\nTotal Diskon : -${formatRp(totalDiscount)}` : ''}${posSale.discountFromPoints ? `\nDiskon Poin  : -${formatRp(posSale.discountFromPoints)}` : ''}
+================================
+*TOTAL BAYAR : ${formatRp(finalTotal)}*
+Bayar (${posSale.paymentMethod || 'Tunai'}): ${formatRp(cash)}
+*Kembalian   : ${formatRp(change)}*
+--------------------------------
+* TERIMA KASIH TELAH BERBELANJA *
+Barang yg dibeli tdk dpt ditukar/dikembalikan
+${profile.receiptFooter || 'Simpan struk ini sebagai bukti pembayaran sah.'}`;
+
+    return encodeURIComponent(message);
+  }
+
+  // Standard Retail Banking / Mini ATM receipt layout
   const netTotal = t.nominal + t.feeCust;
-  const message = `*STRUK BUKTI TRANSAKSI*
-*${profile.storeName}*
-${profile.receiptHeader}
-----------------------------------------
-No. Trx    : #${t.id}
-Waktu      : ${t.time}
-ID Agen    : ${profile.idAgent}
-Layanan    : ${t.type}
-Pengirim   : ${t.cust}
-Tujuan     : ${t.target}
-----------------------------------------
-Nominal    : ${formatRp(t.nominal)}
+  const isVoid = t.status === 'VOID';
+  const message = `*STRUK BUKTI TRANSAKSI LAYANAN*
+*${profile.storeName || 'MINI ATM & TOKO RITEL'}*
+${profile.receiptHeader ? `${profile.receiptHeader}\n` : ''}${profile.address ? `${profile.address}\n` : ''}Telp/WA: ${profile.phone || '-'}
+================================
+No. Struk : #${t.id}${t.refNumber ? `\nNo. Ref   : ${t.refNumber}` : ''}
+Tanggal   : ${t.time}
+ID Agen   : ${profile.idAgent || '-'}
+${isVoid ? '*** TRANSAKSI DIBATALKAN (VOID) ***\n' : ''}--------------------------------
+Layanan   : ${t.type}
+Pengirim  : ${t.cust}
+Tujuan    : ${t.target}
+--------------------------------
+Nominal       : ${formatRp(t.nominal)}
 Biaya Layanan : ${formatRp(t.feeCust)}
-*TOTAL BAYAR : ${formatRp(netTotal)}*
-Status     : ${t.status === 'SUCCESS' ? 'BERHASIL (SUCCESS)' : 'DIBATALKAN (VOID)'}
-----------------------------------------
-${profile.receiptFooter}
-Hub: ${profile.phone}`;
+================================
+*TOTAL BAYAR  : ${formatRp(netTotal)}*${t.cashReceived ? `\nBayar (Tunai) : ${formatRp(t.cashReceived)}\n*Kembalian    : ${formatRp(t.changeAmount || 0)}*` : ''}
+Status        : ${isVoid ? 'DIBATALKAN (VOID)' : 'BERHASIL / SUKSES'}
+--------------------------------
+* TERIMA KASIH ATAS KUNJUNGAN ANDA *
+${profile.receiptFooter || 'Simpan struk ini sebagai bukti transaksi resmi.'}`;
 
   return encodeURIComponent(message);
 }

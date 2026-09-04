@@ -1381,6 +1381,18 @@ export const LaporanPenjualanFisikView: React.FC<LaporanPenjualanFisikViewProps>
                 <span className="text-slate-600">Total Modal Pokok (HPP):</span>
                 <span className="font-mono text-slate-700">{formatRp(selectedSaleDetail.totalCost)}</span>
               </div>
+              {selectedSaleDetail.cashReceived !== undefined && selectedSaleDetail.cashReceived > 0 && (
+                <div className="pt-1 border-t border-dashed border-slate-200 space-y-1">
+                  <div className="flex justify-between text-slate-700">
+                    <span>Uang Diterima:</span>
+                    <span className="font-mono font-semibold">{formatRp(selectedSaleDetail.cashReceived)}</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-800 font-bold">
+                    <span>Kembalian:</span>
+                    <span className="font-mono">{formatRp(selectedSaleDetail.changeAmount || 0)}</span>
+                  </div>
+                </div>
+              )}
               <div className="flex justify-between pt-1 border-t border-slate-200 text-emerald-800 font-bold">
                 <span>Total Laba Bersih Transaksi:</span>
                 <span className="font-mono text-sm">+{formatRp(selectedSaleDetail.grossProfit)}</span>
