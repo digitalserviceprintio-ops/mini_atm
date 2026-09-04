@@ -2,31 +2,76 @@
 <html lang="id">
   <head>
     <script>
-      // Tangani dan redam unhandled rejection akibat penutupan WebSocket Vite di sandbox/preview
+      // Redam dan cegah error websocket HMR Vite di lingkungan preview/sandbox Cloud Run
       (function() {
-        function isWsError(msg) {
-          return typeof msg === 'string' && (
-            msg.indexOf('WebSocket') !== -1 ||
-            msg.indexOf('websocket') !== -1 ||
-            msg.indexOf('closed without opened') !== -1 ||
-            msg.indexOf('failed to connect to websocket') !== -1
-          );
+        if (typeof window !== 'undefined') {
+          var RealWebSocket = window.WebSocket;
+          if (RealWebSocket) {
+            function MockHmrSocket(url, protocols) {
+              if (protocols === 'vite-hmr' || protocols === 'vite-ping') {
+                var target = new EventTarget();
+                target.url = url;
+                target.readyState = 1;
+                target.send = function() {};
+                target.close = function() {};
+                setTimeout(function() {
+                  var openEvt = new Event('open');
+                  target.dispatchEvent(openEvt);
+                  if (typeof target.onopen === 'function') target.onopen(openEvt);
+                }, 0);
+                return target;
+              }
+              return new RealWebSocket(url, protocols);
+            }
+            MockHmrSocket.prototype = RealWebSocket.prototype;
+            MockHmrSocket.OPEN = 1;
+            MockHmrSocket.CONNECTING = 0;
+            MockHmrSocket.CLOSING = 2;
+            MockHmrSocket.CLOSED = 3;
+            window.WebSocket = MockHmrSocket;
+          }
+
+          var origConsoleError = console.error;
+          console.error = function() {
+            var args = Array.prototype.slice.call(arguments);
+            var text = args.map(function(item) {
+              return (item && (item.message || item.toString())) || '';
+            }).join(' ');
+            if (
+              text.indexOf('WebSocket') !== -1 ||
+              text.indexOf('websocket') !== -1 ||
+              text.indexOf('failed to connect to websocket') !== -1 ||
+              text.indexOf('closed without opened') !== -1
+            ) {
+              return;
+            }
+            return origConsoleError.apply(console, arguments);
+          };
+
+          function isWsError(msg) {
+            return typeof msg === 'string' && (
+              msg.indexOf('WebSocket') !== -1 ||
+              msg.indexOf('websocket') !== -1 ||
+              msg.indexOf('closed without opened') !== -1 ||
+              msg.indexOf('failed to connect to websocket') !== -1
+            );
+          }
+          window.addEventListener('unhandledrejection', function(e) {
+            var reason = e && (e.reason || e);
+            var msg = (reason && (reason.message || String(reason))) || '';
+            if (isWsError(msg)) {
+              e.preventDefault();
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            }
+          }, true);
+          window.addEventListener('error', function(e) {
+            var msg = (e && (e.message || String(e))) || '';
+            if (isWsError(msg)) {
+              e.preventDefault();
+              if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+            }
+          }, true);
         }
-        window.addEventListener('unhandledrejection', function(e) {
-          var reason = e && (e.reason || e);
-          var msg = (reason && (reason.message || String(reason))) || '';
-          if (isWsError(msg)) {
-            e.preventDefault();
-            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-          }
-        }, true);
-        window.addEventListener('error', function(e) {
-          var msg = (e && (e.message || String(e))) || '';
-          if (isWsError(msg)) {
-            e.preventDefault();
-            if (e.stopImmediatePropagation) e.stopImmediatePropagation();
-          }
-        }, true);
       })();
     </script>
     <meta charset="UTF-8" />
